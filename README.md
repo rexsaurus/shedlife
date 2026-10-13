@@ -1,37 +1,35 @@
 # ShedLife
 
-SimCity for building a real property. A fully isometric Three.js browser game layered on real land, terrain, zoning and contractor data. Pick a real parcel, shape it, drop real sheds / tiny homes / RVs on it, run the clock, and work through the actual permits. The long-term goal: the same moves hire real contractors and order real structures, with human approval on every real-world action.
+**Permit quest: build a home on a real piece of Washington.** You own a real vacant parcel in rural King County (PIN 8847400030, RA-5, 4.8 acres, real USGS terrain). To live there you need water, septic, power, a building permit and a final inspection — and **every move is an email**. Real agencies (King County Permitting, Public Health, Ecology, L&I, PSE) and fictional contractors answer on the game clock: approved, needs info, not yet, corrections. Claude writes every reply in character; a deterministic engine built on real King County rules and 2026 fees decides what they say.
 
-![P0 screenshot](docs/screenshot.png)
+![ShedLife](docs/screenshot.png)
 
-## P0 (this commit)
-- Vite + Three.js, orthographic isometric camera, wheel zoom
-- **Real parcel**: APN 036174080, vacant land in Montara (unincorporated San Mateo County), from the county's public ArcGIS REST parcel layer
-- **Real terrain**: 24×24 USGS 3DEP 1 m elevation samples around the lot, flat-shaded low-poly
-- 1 m grid clipped to the lot; parcel line in yellow
-- Place tool for an original low-poly 8×10 shed (snaps to 0.5 m, R to rotate, red when it crosses the lot line)
-- Sim clock: pause, 1×, 10×, 60×, 600× (1× = 1 game minute per second); the sun follows the clock
+## How it plays
+1. **Draw a site plan** on the isometric map: home, well, septic drainfield (and sheds, ADU, solar, RV). Setbacks, the 100 ft well-to-drainfield rule, impervious limits and ADU/RV rules are checked live.
+2. **Email the right office.** Pick a request, attach documents you've earned, send. Out of order → "not yet". Missing papers → "needs info". Site plan problems → "corrections".
+3. **Run the clock** (⏭ Next mail). Approvals unlock the next steps of the real permit path: CAD → soil logs → septic design ∥ well site → Ecology NOI → drill → water adequacy → building permit → septic install, electrical, home set → final inspection.
+4. **Win** by passing final inspection before day 240 without running out of $225,000. (The big prefab is a trap.)
+5. Any thread to a real agency can become a **real email draft** (mailto / portal link) — you send it, never the game.
 
-## Land for sale panel
-Right-hand panel lists Bay Area vacant land from legitimate sources only (see [docs/data-sources.md](docs/data-sources.md)):
-- **RentCast** (MLS-derived active listings, `propertyType=Land`): put `RENTCAST_API_KEY=...` in `.env` (free Developer plan at https://app.rentcast.io/app/api). Calls go through the Vite server so the key never reaches the browser; results are cached 6 h to fit the free quota.
-- **County tax-defaulted sales**: download the county's official list (e.g. Santa Clara's Oct 30–Nov 2, 2026 sale spreadsheet from https://www.bid4assets.com/santaclara), save as CSV, then
-  `node scripts/import-taxsale.mjs list.csv --county santa-clara --sale "Oct 30–Nov 2, 2026" --url https://www.bid4assets.com/santaclara`
-"Load lot" pulls the parcel boundary from county GIS (San Mateo / Santa Clara) and terrain from USGS 3DEP via `/api/parcel` (also usable directly: `/api/parcel?lat=37.2365&lon=-121.9619` or `?apn=036174080&county=san-mateo`).
+## Built with Claude
+- **Claude voices the world.** `server/npc.mjs` gives Claude each NPC's persona, sourced agency knowledge, and the engine's facts; Claude must keep every fact and number. No key → scripted letters.
+- **Claude Code–native repo.** `CLAUDE.md` + project skills in `.claude/skills/` (`add-county`, `add-agency-npc`, `add-quest`, `verify-regulation`, `refresh-data`, `npc-voice`, `playtest`, `draft-real-email`), a `regs-researcher` subagent, and Apify MCP in `.mcp.json` for fetching agency pages.
+- **Real data:** King County parcel + zoning GIS, USGS 3DEP elevation, King County 2026 fee guides, WAC/RCW/KCC rules — see [docs/wa-king-county.md](docs/wa-king-county.md).
 
 ## Run
+Copy `.env.example` to `.env` and add `ANTHROPIC_API_KEY` (plus `ANTHROPIC_WORKSPACE_ID` for user-scoped keys).
 ```
 npm install
 npm run dev          # http://localhost:5173
-npm test             # node:test unit tests (geometry, clock, bundled real data)
-npm run fetch-parcel -- 036174080   # refresh parcel + elevation from the live APIs (any San Mateo County APN)
+npm test             # rules, engine, full scripted playthrough, bundled real data
+npm run simulate     # balance: optimal run per home type
+npm run fetch-parcel -- 8847400030 king   # refresh parcel + elevation (King County PIN)
+python3 scripts/playtest.py out/          # headless browser playthrough + screenshots
 ```
 
 ## Roadmap
-- **P0** isometric sandbox on a real parcel ✅
-- **P1** terrain tools (clear, grade, cut/fill) + catalog of real structures with real dimensions and prices
-- **P2** rules engine: zoning, setbacks, lot coverage, ADU and permit rules for one real jurisdiction (San Mateo County)
-- **P3** contractor and vendor hooks (CSLB license lookup, quote requests, vendor links)
-- **P4** real transactions, human-in-the-loop approval for every hire, order or filing
+- ✅ P0 isometric sandbox on a real parcel · ✅ WA inbox game: King County quest graph, rules engine, Claude NPCs
+- Next: Kittitas County "hard mode" (water-bank mitigation), driveway/road quest, random events (failed perc, dry well, winter water table), save/load
+- Later: real contractor lookups (L&I Verify a Contractor), Gmail drafts for real threads, human approval on every real-world action
 
-Data sources and their terms: [docs/data-sources.md](docs/data-sources.md). Art is original; no third-party assets.
+Earlier California work (San Mateo / Santa Clara parcels, land-for-sale panel) still lives in `server/` and `docs/data-sources.md`. Art is original; no third-party assets.

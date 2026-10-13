@@ -2,6 +2,7 @@
 // Without ANTHROPIC_API_KEY (or on any error) the caller keeps the scripted reply.
 import { NPCS } from '../src/scenarios/king-county.js';
 import { factsOf } from '../src/letters.js';
+import { KNOWLEDGE } from '../src/scenarios/king-county-knowledge.js';
 
 export const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
 
@@ -13,6 +14,7 @@ export function buildPrompt({ npc, verdict, thread = [], parcel = {}, day = 0 })
     n.real ? 'This is a real public agency. Be accurate and professional; never invent fees, dates, approvals, staff names, statutes, or requirements beyond the FACTS.' : 'This is a fictional company. You can have personality, but never contradict the FACTS.',
     'Write ONLY the email body (no subject line), 60–160 words, plain text. Every FACT must appear, with numbers exactly as given. Do not add any approval, denial, fee or requirement that is not in the FACTS.',
     'If the player asked a question, answer it in character at a general level and point them to what they would actually submit; you cannot approve anything in an answer.',
+    `What you know (use only if relevant; paraphrase; mention the source for fees or rules):\n${(KNOWLEDGE[npc] || []).map(([f, src]) => `- ${f} [${src}]`).join('\n')}`,
     `Sign off as ${n.real ? n.name : 'a named person at ' + n.name}.`,
   ].join('\n');
   const history = thread.slice(-4).map(m => `${m.from === 'me' ? 'PLAYER' : n.name.toUpperCase()} (day ${m.day}): ${String(m.body || '').slice(0, 900)}`).join('\n\n');

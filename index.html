@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShedLife</title>
+<style>
+ body{margin:0;overflow:hidden;font:13px system-ui,sans-serif;background:#cfe3ef}
+ #hud{position:fixed;top:10px;left:10px;background:#fffd;border-radius:8px;padding:10px 12px;max-width:300px;box-shadow:0 2px 8px #0002}
+ #hud h1{font-size:16px;margin:0 0 4px}
+ #bar{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:#fffd;border-radius:8px;padding:8px;display:flex;gap:6px;align-items:center}
+ button{border:1px solid #889;background:#fff;border-radius:5px;padding:5px 9px;cursor:pointer}
+ button.on{background:#2d6a4f;color:#fff}
+ #clock{font-variant-numeric:tabular-nums;min-width:110px;text-align:center;font-weight:600}
+</style></head>
+<body>
+<div id="hud"><h1>ShedLife <small>P0</small></h1><div id="info">Loading real parcel…</div></div>
+<div id="bar">
+ <button id="tool-place" class="on" title="P">Place shed</button>
+ <button id="rotate" title="R">Rotate ⟳</button>
+ <button id="clear">Clear</button>
+ <span id="clock">—</span>
+ <button data-speed="0">⏸</button><button data-speed="1" class="on">▶ 1×</button><button data-speed="10">10×</button><button data-speed="60">60×</button><button data-speed="600">600×</button>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body></html>

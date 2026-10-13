@@ -26,7 +26,7 @@ The long-term goal: the plan you build in the game is a plan you could carry out
 
 **AI agents can act now, so they need guardrails.** Agents can now look up a contractor's license, request a quote, fill out a form, or draft a permit application. ShedLife is a concrete, bounded place to build that the right way: the agent does the legwork, the game shows the consequences, and a human approves every real-world action.
 
-**[REX: personal why?]** _Placeholder. Rex adds his own story here: why ShedLife, why now, what he'd build on a lot of his own._
+There are many plots of land in great locations, but converting them into liveability involves a lot of permits that hamper the process. My idea is that if that could be automated, people could build for cheaper.
 
 ## 3. Users
 

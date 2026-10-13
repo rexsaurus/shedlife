@@ -16,5 +16,8 @@ King County publishes Fee Guides 01 (pre-development) and 02 (single-family) as 
 ## Agency knowledge (what NPCs know when answering questions)
 `src/scenarios/king-county-knowledge.js` holds short paraphrased facts per NPC with source URLs. To refresh, fetch the agency pages with the Apify MCP `apify--rag-web-browser` (or WebFetch), paraphrase the parts that matter for a homeowner, keep each fact one line, keep the URL.
 
+## Vendor catalog
+Edit `data/wa-vendors.json` (see the `add-vendor-product` skill), then `npm run vendors`.
+
 ## Land listings (optional)
 `server/listings.mjs` supports RentCast (official API) and county tax-sale imports. Any Apify Actor that scrapes a commercial listing site (Zillow, LandWatch, …) needs Rex's explicit OK for that use first (CLAUDE.md invariant 5); if approved, save the dataset to `data/` as a dated snapshot with the Actor id, and normalize it with the same shape as `normalizeRentcast()`.

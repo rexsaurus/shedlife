@@ -37,5 +37,12 @@ export const KNOWLEDGE = {
   designer: [['Soil logs come before design; wet-season (winter water table) review can add time on the Eastside.', 'game knowledge (fictional contractor)']],
   driller: [['Typical Western Washington wells run 100–400 ft; complete wells often $15–35K. Depth is never guaranteed.', 'cost estimate, UNVERIFIED']],
   builder: [['A factory-built home needs L&I approval and a county building permit before delivery.', 'King County "Residential Tiny Homes" handout']],
+  'bank-cu': [['Construction-to-permanent ("one-time close") loans fund the build in draws, charge interest-only during construction, then convert to a regular mortgage.', 'general lending practice (game simplification)'],
+    ['Lenders want approved plans, a builder contract or bid, an as-completed appraisal, and the building permit before funding.', 'general lending practice'],
+    ['Tiny homes on wheels and park models are usually financed as RVs (chattel/personal loans), not mortgages.', 'general lending practice']],
+  'bank-ridge': [['Construction-to-permanent loans: draws during the build, interest-only until completion, then a 30-year mortgage.', 'general lending practice (game simplification)'],
+    ['Typical underwriting looks at credit score, debt-to-income (often ≤43%) and loan-to-value (often ≤80% of the as-completed value).', 'general lending practice']],
+  usda: [['Section 502 Direct loans help low- and very-low-income applicants buy or build in eligible rural areas; Guaranteed loans back approved private lenders for moderate incomes.', 'USDA Rural Development single family housing programs'],
+    ['Eligibility depends on the property location and household income limits that vary by county and household size; check the USDA eligibility site.', 'eligibility.sc.egov.usda.gov']],
   septicer: [['Installation waits for the Public Health install permit; an as-built drawing is filed after.', 'Public Health OSS program']],
 };

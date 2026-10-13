@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ShedLife</title>
+<meta name="description" content="A training simulator for building a home on real Washington land: real parcels, real permit path, real vendors, real loans — on an accelerated clock.">
 <style>
  :root{--paper:#fbf8f1;--ink:#1f2a24;--mute:#6b7069;--line:#e3ddd0;--green:#2d6a4f;--red:#b3261e;--gold:#a8741a;--blue:#2c5d7c;--sky:#cfe3ef}
  *{box-sizing:border-box} body{margin:0;overflow:hidden;font:13px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink);background:var(--sky)}
@@ -74,6 +75,7 @@
  <div class="stat"><small>Day</small><b id="sDay">0</b> <span class="claude">/ <span id="sDeadline">240</span></span></div>
  <div class="stat"><small>Budget</small><b id="sBudget">$0</b></div>
  <div class="stat"><small>Permits</small><b id="sProgress">0/0</b></div>
+ <div class="stat"><small>Loan</small><b id="sLoan" style="font-size:12px">none</b></div>
  <div class="stat"><small>NPC voice</small><b id="sVoice" style="font-size:12px">…</b></div>
  <button id="topMap">🗺 Washington</button><button id="topShop">🛒 Shop</button>
 </div>

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShedLife Stack</title>
+<style>
+ html,body{margin:0;background:#0d1321;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+ #c{position:fixed;inset:0}
+ .ov{position:fixed;color:#fff;pointer-events:none}
+ #title{top:34px;left:44px} #title h1{margin:0;font-size:64px;letter-spacing:-.02em;font-weight:900} #title h1 span{color:#74c69d}
+ #title p{margin:6px 0 0;font-size:24px;color:#c9d6e3;max-width:640px;line-height:1.3}
+ .tag{font-weight:800;font-size:15px;letter-spacing:.12em;text-transform:uppercase;padding:6px 12px;border-radius:999px;display:inline-block}
+ #t1{right:48px;top:150px;background:#2d6a4f} #t2{right:48px;top:400px;background:#3a5a8c} #t3{right:48px;bottom:170px;background:#9b2c2c}
+ #foot{left:0;right:0;bottom:0;padding:14px 44px;background:linear-gradient(transparent,#0d1321 40%);font-size:17px;color:#9fb3c8} #foot b{color:#fff}
+ #nums{left:44px;bottom:58px;text-shadow:0 2px 8px #000;font-size:20px;color:#fff;display:flex;gap:28px} #nums div small{display:block;color:#9fb3c8;font-size:13px;text-transform:uppercase;letter-spacing:.08em}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="title" class="ov"><h1>Shed<span>Life</span></h1><p>Building a home on rural Washington land is a rat's nest of agencies, codes and forms. We turned it into a game.</p></div>
+<div id="t1" class="ov tag">① The game: shop, place, email, win</div>
+<div id="t2" class="ov tag">② The engine: real rules → verdicts · Claude voices every NPC</div>
+<div id="t3" class="ov tag">③ Reality: the bureaucracy</div>
+<div id="nums" class="ov"><div><small>Agencies & NPCs</small>60+</div><div><small>Permit steps</small>17</div><div><small>WA parcels</small>~3M</div><div><small>Real timeline</small>~7 months → minutes</div></div>
+<div id="foot" class="ov"><b>Real parcels</b> (WaTech, King County GIS) · <b>real terrain</b> (USGS 3DEP) · <b>real 2026 fees</b> · <b>real WA vendors</b> · built with <b>Claude Code</b></div>
+<script type="module">
+import * as THREE from 'three';
+import { portraitSpec, mountPortrait } from '/src/portraits.js';
+
+const W = 1600, H = 900;
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H); renderer.shadowMap.enabled = true;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1321); scene.fog = new THREE.Fog(0x0d1321, 70, 140);
+const cam = new THREE.PerspectiveCamera(32, W / H, 0.1, 400);
+cam.position.set(50, 25, 64); cam.lookAt(-7, -0.5, 0);
+scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x1a1a2a, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(20, 40, 25); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30 }); scene.add(sun);
+const lam = (c, o = {}) => new THREE.MeshLambertMaterial({ color: c, ...o });
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+// text label sprite
+function label(text, { color = '#fff', bg = 'rgba(0,0,0,0.55)', size = 30, scale = 0.018 } = {}) {
+  const c = document.createElement('canvas'), x = c.getContext('2d'); x.font = `700 ${size}px system-ui`;
+  const w = Math.ceil(x.measureText(text).width) + 24; c.width = w; c.height = size + 18;
+  x.fillStyle = bg; x.beginPath(); x.roundRect(0, 0, w, c.height, 10); x.fill();
+  x.font = `700 ${size}px system-ui`; x.fillStyle = color; x.textBaseline = 'middle'; x.fillText(text, 12, c.height / 2 + 1);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthWrite: false })); s.scale.set(w * scale, c.height * scale, 1); return s;
+}
+
+// ③ RAT'S NEST (y ≈ -9)
+const NEST_Y = -9;
+const nodes = [
+  'King County Permitting', 'Public Health – SKC', 'Dept. of Ecology', 'Labor & Industries', 'Puget Sound Energy', 'Hearing Examiner',
+  'KCC 21A.12 setbacks', 'WAC 246-272A septic', 'RCW 90.94 well fee', 'RCW 19.27.097 water', 'Critical Area Designation', 'Notice of Intent (72 h)',
+  'Soil logs ×5', 'Fee Guide 02', 'Pump test', 'Arsenic & nitrate tests', 'Septic designer', 'Well driller', 'Construction loan', 'Appraisal',
+  '60-day RV rule', 'Title notice (ADU)', 'Winter water table', 'Line extension (Rule 6)', 'Electrical permit', 'Final inspection', 'King County Council', 'Appearance of Fairness',
+];
+const nestGroup = new THREE.Group(); scene.add(nestGroup);
+const floor = new THREE.Mesh(new THREE.CylinderGeometry(20, 22, 1, 48), lam(0x2a1d24)); floor.position.y = NEST_Y - 2.4; floor.receiveShadow = true; nestGroup.add(floor);
+const pos = [];
+nodes.forEach((n, i) => {
+  const a = i / nodes.length * Math.PI * 2 * 2.3 + rnd() * 0.6, r = 5 + rnd() * 12;
+  const p = new THREE.Vector3(Math.cos(a) * r, NEST_Y + (rnd() - 0.5) * 3, Math.sin(a) * r); pos.push(p);
+  const kind = i % 3;
+  const geo = kind === 0 ? new THREE.BoxGeometry(1.6, 2.2, 1.6) : kind === 1 ? new THREE.BoxGeometry(1.8, 0.5, 1.3) : new THREE.CylinderGeometry(0.8, 0.8, 1.6, 8);
+  const m = new THREE.Mesh(geo, lam([0x7a2e2e, 0x8a5a2e, 0x5c3a5c, 0x6b4a2a][i % 4])); m.position.copy(p); m.rotation.set(rnd() * 0.6, rnd() * 3, rnd() * 0.6); m.castShadow = true; nestGroup.add(m);
+  if (kind === 1) for (let k = 1; k < 4; k++) { const sheet = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.08, 1.2), lam(0xe8e0cc)); sheet.position.copy(p).add(new THREE.Vector3(0, 0.3 + k * 0.12, 0)); sheet.rotation.y = rnd(); nestGroup.add(sheet); }
+  const l = label(n, { color: '#ffd9d0', bg: 'rgba(60,10,14,0.82)', size: 30, scale: 0.026 }); l.position.copy(p).add(new THREE.Vector3(0, 1.9, 0)); nestGroup.add(l);
+});
+// tangled red tape
+const tape = [0xd64545, 0xe07a2e, 0xb83280, 0xc94c3c];
+for (let k = 0; k < 70; k++) {
+  const a = pos[Math.floor(rnd() * pos.length)], b = pos[Math.floor(rnd() * pos.length)]; if (a === b) continue;
+  const pts = [a.clone()]; for (let j = 0; j < 3; j++) pts.push(new THREE.Vector3((rnd() - 0.5) * 32, NEST_Y + (rnd() - 0.5) * 6, (rnd() - 0.5) * 40)); pts.push(b.clone());
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 60, 0.07, 5), new THREE.MeshBasicMaterial({ color: tape[k % 4], transparent: true, opacity: 0.75 }));
+  nestGroup.add(tube);
+}
+
+// ② ENGINE SLAB (y ≈ 1)
+const SLAB_Y = 0.5;
+const slab = new THREE.Mesh(new THREE.BoxGeometry(34, 1.2, 34), new THREE.MeshPhysicalMaterial({ color: 0x3a6ea8, transparent: true, opacity: 0.35, roughness: 0.2, metalness: 0.1 }));
+slab.position.y = SLAB_Y; scene.add(slab);
+const edges = new THREE.LineSegments(new THREE.EdgesGeometry(slab.geometry), new THREE.LineBasicMaterial({ color: 0x8fd3ff })); edges.position.copy(slab.position); scene.add(edges);
+const grid = new THREE.GridHelper(34, 17, 0x8fd3ff, 0x4f7fa8); grid.position.y = SLAB_Y + 0.62; grid.material.transparent = true; grid.material.opacity = 0.45; scene.add(grid);
+['rules.js · setbacks, septic, wells', 'engine.js · deterministic verdicts', 'Claude · NPC voices', 'quest graph · 17 real steps'].forEach((t, i) => {
+  const l = label(t, { color: '#e6f4ff', bg: 'rgba(20,50,90,0.85)', size: 28, scale: 0.022 }); l.position.set(-13 + i * 8.6, SLAB_Y + 1.6, 15.5); scene.add(l);
+});
+// clean beams: nest → engine
+for (let i = 0; i < pos.length; i += 2) {
+  const p = pos[i], top = new THREE.Vector3(p.x * 0.6, SLAB_Y - 0.6, p.z * 0.6);
+  const beam = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(p.clone().add(new THREE.Vector3(0, 1, 0)), top), 1, 0.06, 6), new THREE.MeshBasicMaterial({ color: 0x8fd3ff, transparent: true, opacity: 0.55 }));
+  scene.add(beam);
+}
+
+// ① THE GAME (y ≈ 8)
+const G = new THREE.Group(); G.position.y = 7.5; scene.add(G);
+const base = new THREE.Mesh(new THREE.BoxGeometry(24, 1.4, 20), lam(0x5a3d2b)); base.position.y = -0.7; base.castShadow = base.receiveShadow = true; G.add(base);
+const grass = new THREE.Mesh(new THREE.BoxGeometry(24, 0.3, 20), lam(0x7fb95d)); grass.position.y = 0.1; grass.receiveShadow = true; G.add(grass);
+const lot = new THREE.Mesh(new THREE.BoxGeometry(15, 0.32, 12), lam(0x95cc6e)); lot.position.set(-1, 0.12, 0); lot.receiveShadow = true; G.add(lot);
+const border = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(15, 0.34, 12)), new THREE.LineBasicMaterial({ color: 0xffd23f })); border.position.copy(lot.position); G.add(border);
+function house(x, z, w, d, h, wall, roof) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), lam(wall)); body.position.y = h / 2; g.add(body);
+  const s = new THREE.Shape(); s.moveTo(-w / 2 - 0.2, 0); s.lineTo(w / 2 + 0.2, 0); s.lineTo(0, w * 0.45); s.closePath();
+  const r = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: d + 0.4, bevelEnabled: false }), lam(roof)); r.position.set(0, h, -d / 2 - 0.2); g.add(r);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.3, 0.05), lam(0xf2efe6)); door.position.set(0, 0.65, d / 2 + 0.03); g.add(door);
+  g.position.set(x, 0.3, z); g.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } }); G.add(g); return g;
+}
+house(-4, -1, 3.6, 5.6, 2.2, 0xd9cfc1, 0x444b52);
+house(2.4, -3.2, 1.6, 2, 1.4, 0xc8a26b, 0x4a5a66);
+const field = new THREE.Mesh(new THREE.BoxGeometry(4, 0.06, 5.4), lam(0x8a7a5a)); field.position.set(2.6, 0.32, 2.6); G.add(field);
+for (let i = -2; i <= 2; i++) { const t = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 0.18), lam(0x5d4c35)); t.position.set(2.6, 0.38, 2.6 + i); G.add(t); }
+const well = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.8, 10), lam(0x4e7fa3)); well.position.set(5.6, 0.7, -4.4); well.castShadow = true; G.add(well);
+const tr = lam(0x5a3e2b), cr = lam(0x2f5d3a);
+for (let i = 0; i < 46; i++) {
+  const x = (rnd() - 0.5) * 23, z = (rnd() - 0.5) * 19; if (Math.abs(x + 1) < 8 && Math.abs(z) < 6.5) continue;
+  const s = 0.5 + rnd() * 0.5, a = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s, 0.15 * s, 1 * s, 5), tr); a.position.set(x, 0.3 + 0.5 * s, z);
+  const b = new THREE.Mesh(new THREE.ConeGeometry(0.9 * s, 3 * s, 6), cr); b.position.set(x, 0.3 + 2.2 * s, z); a.castShadow = b.castShadow = true; G.add(a, b);
+}
+// floating envelopes + coins
+const env = lam(0xfbf8f1), flap = lam(0xd64545);
+[[-7, 4.2, 4], [-2, 5.4, 6], [4.5, 4.6, 5], [8, 5.8, -2], [-8.5, 5, -4]].forEach(([x, y, z], i) => {
+  const e = new THREE.Group(); const b = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.9, 0.08), env); e.add(b);
+  const f = new THREE.Mesh(new THREE.ConeGeometry(0.72, 0.5, 4), flap); f.rotation.set(Math.PI / 2, Math.PI / 4, 0); f.position.set(0, 0.25, 0.05); f.scale.set(1, 0.08, 0.6); e.add(f);
+  e.position.set(x, y, z); e.rotation.set(0.2, i, 0.1); G.add(e);
+});
+for (let i = 0; i < 7; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.1, 16), new THREE.MeshStandardMaterial({ color: 0xffc94a, metalness: 0.6, roughness: 0.3 })); c.position.set(-10 + i * 1.2, 3.4 + (i % 2) * 0.4, -8.5); c.rotation.x = Math.PI / 2.3; G.add(c); }
+// pixel-portrait NPC billboards
+const ids = ['permitting', 'health', 'ecology', 'king-council-district3', 'bank-cu', 'king-hex-hearingexaminer'];
+const bgs = ['#2d6a4f', '#2c5d7c', '#1f6f8b', '#2d6a4f', '#3d6b4f', '#5b3a6b'];
+ids.forEach((id, i) => {
+  const cv = document.createElement('canvas'); mountPortrait(cv, portraitSpec(id, bgs[i]));
+  const tex = new THREE.CanvasTexture(cv); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex })); sp.scale.set(2.3, 2.3, 1);
+  const a = -0.4 + i * 0.55; sp.position.set(Math.cos(a) * 13 - 2, 3.4 + (i % 2) * 1.1, Math.sin(a) * 10 - 1); G.add(sp);
+  sp.userData.tex = tex;
+});
+const gl = label('✉ Permitting: APPROVED', { color: '#d8f3dc', bg: 'rgba(27,67,50,0.92)', size: 30, scale: 0.024 }); gl.position.set(-7.5, 6.6, 3); G.add(gl);
+const gl2 = label('🏦 Loan funded: $158,000', { color: '#fff3c4', bg: 'rgba(90,64,10,0.92)', size: 30, scale: 0.024 }); gl2.position.set(6.5, 7.6, -2); G.add(gl2);
+
+// render (still frame for the PNG; gentle motion when viewed live)
+function frame(t) {
+  G.children.forEach(o => { if (o.userData.tex) o.userData.tex.needsUpdate = true; });
+  G.rotation.y = Math.sin(t / 4000) * 0.04;
+  renderer.render(scene, cam); requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.__ready = true;
+</script>
+</body></html>

@@ -1,6 +1,7 @@
 # ShedLife — Claude Code guide
 
-ShedLife is a game about getting a real home permitted on a real vacant parcel in Washington State.
+ShedLife is a **training simulator** for building a home on real Washington land — real parcels, the real permit path,
+real vendors, real loan mechanics — on an accelerated clock, made just fun enough that learning it doesn't hurt.
 The isometric map is the site plan; **the inbox is the game**: every move is an email to a real public agency
 or a (fictional) contractor. A deterministic engine decides every outcome; Claude only writes the replies.
 
@@ -27,16 +28,23 @@ user-scoped `sk-ant-usr` keys), `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`),
 | `server/npc.mjs` | Claude voices a verdict in the NPC's persona (`POST /api/npc`). Falls back to scripted text on any error |
 | `server/parcel.mjs` | Parcel + terrain loader (King County PropertyInfo layer with zoning, plus CA counties) |
 | `src/main.js`, `src/meshes.js`, `index.html` | Three.js map, placement, inbox/compose/quest-log UI |
+| `src/officials.js` | Real Seattle-area **bodies and seats** (King/Seattle/Bellevue/Snohomish/Pierce councils, Kitsap/Kittitas/Skagit/Island commissions, King County Hearing Examiner) seated with **fictional, seed-generated people** |
+| `src/portraits.js` | Original procedural 16-bit portraits (32×32) with bob/blink/talk animation, seeded by NPC id |
+| `src/data/vendors.js` | GENERATED from `data/wa-vendors.json` (real WA vendor products, cited, dated) by `npm run vendors` |
+| Loans (`LENDERS` in the scenario, `prequalMax`/`loanAmountFor`/`monthlyPayment` in engine) | Fictional lenders, real loan mechanics: prequal (43% DTI) → apply + appraisal → close after permit; interest-only monthly; converts to 30-yr mortgage |
+| `server/wa-parcels.mjs`, `src/wamap.js` | Statewide WaTech parcels on an OpenStreetMap basemap; pick any parcel (King adds zoning from county GIS) |
+| `docs/diagram/` | 3D "rat's nest → engine → game" diagram (render with Playwright to `docs/shedlife-stack.png`) |
 | `docs/wa-king-county.md` | Research notes and sources behind every rule, fee and contact |
 
 ## Invariants (do not break)
 1. **The engine decides, Claude narrates.** Never let model output change game state. New outcomes go in `engine.js` + `letters.js` (`factsOf`) with tests.
-2. **Real agencies, real public contacts only.** General intake addresses / portals from the agency's own site. No individual staff names or emails. Contractors are fictional (`real:false`, `.example` emails).
-3. **Every rule, fee and requirement has a `cite`/`ref`.** If you could not confirm it from a primary source, say UNVERIFIED in `docs/wa-king-county.md` and keep the game number labelled as an estimate (`est:true`).
-4. **Human-in-the-loop for anything real.** The game may prepare a real email (mailto / Gmail draft), never send one. No automated portal submissions.
-5. **Data sourcing rule** (docs/data-sources.md): official APIs, open government data, or licensed feeds. Using an Apify Actor that scrapes a commercial listing site needs Rex's explicit OK per use; government pages via `apify/rag-web-browser` are fine.
-6. Keep `npm test` green; the full-playthrough test is the balance contract (an optimal run must win).
+2. **No real people as characters.** Officials sit on real bodies but are fictional and generated; Claude never names, quotes or impersonates a real officeholder, and portraits are procedural. Real vendors appear only as their products, prices and links.
+3. **Real agencies, real public contacts only.** General intake addresses / portals from the agency's own site. No individual staff names or emails. Contractors are fictional (`real:false`, `.example` emails).
+4. **Every rule, fee and requirement has a `cite`/`ref`.** If you could not confirm it from a primary source, say UNVERIFIED in `docs/wa-king-county.md` and keep the game number labelled as an estimate (`est:true`).
+5. **Human-in-the-loop for anything real.** The game may prepare a real email (mailto / Gmail draft), never send one. No automated portal submissions.
+6. **Data sourcing rule** (docs/data-sources.md): official APIs, open government data, or licensed feeds. Using an Apify Actor that scrapes a commercial listing site needs Rex's explicit OK per use; government pages via `apify/rag-web-browser` are fine.
+7. Keep `npm test` green; the full-playthrough test is the balance contract (an optimal run must win).
 
 ## Skills in this repo (`.claude/skills/`)
-`add-county` · `add-agency-npc` · `add-quest` · `verify-regulation` · `refresh-data` · `npc-voice` · `playtest` · `draft-real-email`
+`add-county` · `add-agency-npc` · `add-official-body` · `add-vendor-product` · `add-quest` · `verify-regulation` · `refresh-data` · `npc-voice` · `playtest` · `draft-real-email`
 Subagent: `regs-researcher` (`.claude/agents/`). MCP: Apify via `.mcp.json` (needs `APIFY_TOKEN`).

@@ -1,8 +1,19 @@
 # ShedLife
 
+**A training simulator for building a home on real Washington land — on an accelerated clock, just fun enough that it doesn't hurt.**
+
+![ShedLife stack](docs/shedlife-stack.png)
+
 **Permit quest: build a home on a real piece of Washington.** You own a real vacant parcel in rural King County (PIN 8847400030, RA-5, 4.8 acres, real USGS terrain). To live there you need water, septic, power, a building permit and a final inspection — and **every move is an email**. Real agencies (King County Permitting, Public Health, Ecology, L&I, PSE) and fictional contractors answer on the game clock: approved, needs info, not yet, corrections. Claude writes every reply in character; a deterministic engine built on real King County rules and 2026 fees decides what they say.
 
 ![ShedLife](docs/screenshot.png)
+
+## What's in it
+- **Pick any parcel in Washington** on a statewide map (WaTech parcels, ~3M; vacant = no building value). King County lots get real zoning from county GIS.
+- **Shop real Washington vendors** — sheds, tiny homes, park models, modular homes, ADUs with real sizes and prices (and the hard lesson: in King County a tiny home on wheels is an RV, not a home).
+- **Email every agency** in the real order; a deterministic engine built on real rules and 2026 fees decides; Claude voices every reply.
+- **Talk to officials** — every seat on the King, Seattle, Bellevue, Snohomish and Pierce councils, four county commissions and the King County Hearing Examiner, as animated 16-bit portraits. The bodies are real; the people are fictional.
+- **Finance it** — you start with $100k cash. Pre-qualify at a bank, apply with plans, close after the permit; interest runs monthly; win with a mortgage.
 
 ## How it plays
 1. **Draw a site plan** on the isometric map: home, well, septic drainfield (and sheds, ADU, solar, RV). Setbacks, the 100 ft well-to-drainfield rule, impervious limits and ADU/RV rules are checked live.

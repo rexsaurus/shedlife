@@ -9,7 +9,9 @@ export const SCENARIO = {
   state: 'WA', county: 'King',
   pitch: 'You own 4.8 vacant acres zoned RA-5. Get a legal, livable home on it: water, septic, power, permits, final inspection.',
   startDate: Date.UTC(2026, 9, 12, 8, 0),
-  budget: 350000,
+  budget: 100000, // cash on hand; homes need a construction loan (see LENDERS)
+  landValue: 180000, // game estimate for the bundled parcel when the assessor value isn't loaded
+  player: { income: 140000, debtsMonthly: 600, credit: 745 }, // fictional borrower profile
   deadlineDay: 240,
 };
 
@@ -66,6 +68,19 @@ export const AGENCIES = {
     email: 'sales@snoqualmieprefab.example', persona: 'Prefab sales lead. Upbeat, transparent on lead times, needs a building permit before setting a home.',
     avatar: '🏠',
   },
+  'bank-cu': {
+    name: 'Evergreen Valley Credit Union', org: 'Construction-to-permanent loans (fictional lender)', real: false, email: 'loans@evergreenvalley.example',
+    persona: 'Loan officer at a member-owned credit union. Patient, explains every number, a little slow, never pushy.', avatar: '🏦',
+  },
+  'bank-ridge': {
+    name: 'Puget Ridge Bank', org: 'Construction lending desk (fictional lender)', real: false, email: 'construction@pugetridge.example',
+    persona: 'Brisk commercial-bank lender. Fast turnaround, stricter credit, talks in basis points.', avatar: '🏦',
+  },
+  usda: {
+    name: 'USDA Rural Development (Washington)', org: 'Single Family Housing (Section 502 Direct and Guaranteed loans)', real: true, email: null,
+    url: 'https://www.rd.usda.gov/programs-services/single-family-housing-programs', channel: 'Eligibility checks online; applications through RD offices or approved lenders',
+    persona: 'Federal program staff. Friendly, careful about eligibility, points people to the online eligibility tool.', avatar: '🌾',
+  },
   septicer: {
     name: 'Tolt River Septic Install', org: 'Licensed septic installer (fictional)', real: false,
     email: 'jobs@toltriver.example', persona: 'Installer. Practical, will not dig before an install permit is issued.',
@@ -97,6 +112,9 @@ export const DOCS = {
   'electrical-permit': 'L&I electrical permit',
   'home-set': 'Home set on foundation',
   'occupancy': 'Final inspection passed',
+  'prequal-bank-cu': 'Pre-qualification letter (Evergreen Valley CU)', 'prequal-bank-ridge': 'Pre-qualification letter (Puget Ridge Bank)',
+  'loan-approval-bank-cu': 'Loan approval + appraisal (Evergreen Valley CU)', 'loan-approval-bank-ridge': 'Loan approval + appraisal (Puget Ridge Bank)',
+  'loan-funded': 'Construction loan funded',
 };
 
 // ---- Quest graph. Each quest is one email ask to one NPC.
@@ -142,6 +160,24 @@ export const QUESTS = [
   { id: 'final', npc: 'permitting', title: 'Final inspection', ask: 'Request final inspection and occupancy.',
     needs: ['home-set', 'septic-installed', 'electrical-permit'], after: ['set-home', 'septic-install', 'electrical'], fee: 0, days: 7, gives: ['occupancy'], cite: 'King County final inspection' },
 ];
+
+// ---- Financing subgame. Lenders are fictional; terms are game estimates of typical 2026 construction-to-permanent loans.
+export const LENDERS = {
+  'bank-cu': { rate: 0.0725, appraisalFee: 700, appraisalDays: 21, closingPct: 0.02, minCredit: 680, maxLtv: 0.8 },
+  'bank-ridge': { rate: 0.0775, appraisalFee: 650, appraisalDays: 12, closingPct: 0.015, minCredit: 720, maxLtv: 0.8 },
+};
+export const SITE_BUDGET = 60000; // septic + well + power + permits the loan also covers (game estimate)
+for (const b of Object.keys(LENDERS)) QUESTS.push(
+  { id: `${b}-prequal`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Get pre-qualified', ask: 'Ask for a construction-to-permanent loan pre-qualification.',
+    needs: [], after: [], fee: 0, days: 2, gives: [`prequal-${b}`], loan: 'prequal', cite: 'Lender underwriting: debt-to-income ≤43%, credit score (game simplification)' },
+  { id: `${b}-apply`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Apply + appraisal', ask: 'Apply for the construction loan and order the as-completed appraisal.',
+    needs: ['site-plan', `prequal-${b}`, 'home-plans'], after: [`${b}-prequal`, 'plans'], fee: LENDERS[b].appraisalFee, est: true, days: LENDERS[b].appraisalDays,
+    gives: [`loan-approval-${b}`], loan: 'apply', requiresHome: true, cite: 'Construction lenders require plans, a builder bid and an as-completed appraisal (game simplification)' },
+  { id: `${b}-close`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Close + fund the loan', ask: 'Close the construction loan now that the building permit is issued.',
+    needs: [`loan-approval-${b}`, 'building-permit'], after: [`${b}-apply`, 'permit'], fee: 'loanClosing', est: true, days: 5,
+    gives: ['loan-funded'], loan: 'close', cite: 'Lenders close construction loans after the building permit issues; interest-only during construction (game simplification)' },
+);
+
 export const questById = Object.fromEntries(QUESTS.map(q => [q.id, q]));
 
 // King County 2026 Fee Guide 02 building permit fees by home type (+ $500 exempt-well fee, + $6.50 state surcharge + $126 screening).

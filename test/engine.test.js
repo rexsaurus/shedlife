@@ -43,6 +43,14 @@ test('site plan violations come back as corrections', () => {
   const r = send(g, { npc: 'permitting', questId: 'cad', attachments: ['site-plan'] });
   assert.equal(r.verdict.kind, 'corrections'); assert.ok(r.verdict.violations.length);
 });
+test('loan math: prequal, LTV cap, payment', async () => {
+  const { prequalMax, loanAmountFor, monthlyPayment } = await import('../src/engine.js');
+  const g = withPlan(newGame(SCENARIO), goodPlan());
+  assert.ok(prequalMax(g, 'bank-cu') > 400000);
+  assert.equal(loanAmountFor(g, 'bank-cu'), byId.tiny.cost + 60000);
+  assert.ok(Math.abs(monthlyPayment(100000, 0.06) - 599.55) < 0.1);
+  g.player.credit = 700; send(g, { npc: 'bank-ridge', questId: 'bank-ridge-prequal' }); assert.equal(g.threads['bank-ridge'].at(-1).verdict.kind, 'declined');
+});
 test('full playthrough reaches occupancy within budget and deadline', () => {
   const g = withPlan(newGame(SCENARIO), goodPlan());
   let guard = 0;
@@ -55,5 +63,7 @@ test('full playthrough reaches occupancy within budget and deadline', () => {
   }
   assert.ok(g.outcome?.won, JSON.stringify({ outcome: g.outcome, quests: g.quests, budget: g.budget }));
   assert.ok(g.budget >= 0); assert.ok(g.outcome.day <= SCENARIO.deadlineDay, `day ${g.outcome.day}`);
-  assert.equal(Object.values(g.quests).filter(s => s === 'done').length, QUESTS.length);
+  assert.ok(QUESTS.filter(q => !q.loan).every(q => g.quests[q.id] === 'done'));
+  assert.ok(g.loan && g.loan.amount > 0, 'construction loan funded'); assert.ok(g.loan.interest > 0, 'interest charged');
+  assert.equal(QUESTS.filter(q => q.loan === 'close' && g.quests[q.id] === 'done').length, 1, 'exactly one lender funds');
 });

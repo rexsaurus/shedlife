@@ -202,14 +202,15 @@ async function voice(msg, npc) {
 
 // ---------------------------------------------------------------- UI
 let composeQuest = null, inboxTab = 'agencies', headPortrait = null;
-const AGENCY_BG = { permitting: '#2d6a4f', health: '#2c5d7c', ecology: '#1f6f8b', lni: '#a8741a', utility: '#4a4a52' };
+const AGENCY_BG = { permitting: '#2d6a4f', health: '#2c5d7c', ecology: '#1f6f8b', lni: '#a8741a', utility: '#4a4a52', 'bank-cu': '#3d6b4f', 'bank-ridge': '#2f3e5c', usda: '#6b5a2e' };
 const specFor = id => portraitSpec(id, NPCS[id].official ? NPCS[id].color : AGENCY_BG[id] || '#7a5c2e');
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { inboxTab = b.dataset.tab; render(); });
 function render() {
   if (!g) return;
   $('sDay').textContent = g.day; $('sDeadline').textContent = SCENARIO.deadlineDay;
   $('sBudget').textContent = fmt$(g.budget); $('sBudget').style.color = g.budget < 20000 ? 'var(--red)' : '';
-  $('sProgress').textContent = `${Object.values(g.quests).filter(s => s === 'done').length}/${QUESTS.length}`;
+  const core = QUESTS.filter(q => !q.loan); $('sProgress').textContent = `${core.filter(q => g.quests[q.id] === 'done').length}/${core.length}`;
+  $('sLoan').textContent = g.loan ? `${fmt$(g.loan.amount)} @ ${(g.loan.rate * 100).toFixed(2)}%` : 'none'; $('sLoan').title = g.loan ? `Interest paid so far: ${fmt$(g.loan.interest)}` : 'Talk to a bank in the Agencies tab';
   $('clock').textContent = `Day ${gameDay()}`;
   const u = unread(g); $('unread').innerHTML = u ? `<span class="badge b-answer">${u}</span>` : '';
   // threads (agencies & contractors | officials grouped by body)
@@ -292,7 +293,8 @@ $('send').onclick = () => {
 
 function renderQuests() {
   const icon = q => q.status === 'done' ? '✅' : q.status === 'pending' ? '⏳' : q.ready ? '🟢' : '🔒';
-  $('qlist').innerHTML = questLog(g).map(q => `<div class="q ${q.status === 'done' ? 'done' : !q.ready && q.status === 'open' ? 'locked' : ''}" data-q="${q.id}"><span class="st">${icon(q)}</span><div><div class="t">${q.title}</div><div class="m">${NPCS[q.npc].avatar} ${NPCS[q.npc].name}${typeof q.feeNow === 'number' && q.feeNow ? ' · ' + fmt$(q.feeNow) + (q.est ? ' est.' : '') : ''}${q.status === 'open' && !q.ready ? ' · after: ' + q.waitingOn.join(', ') : ''}</div></div></div>`).join('');
+  let sec = '';
+  $('qlist').innerHTML = questLog(g).map(q => (q.section && q.section !== sec ? (sec = q.section, `<h2 style="margin-top:12px">${q.section} <span class="claude" style="text-transform:none">pick one lender</span></h2>`) : '') + `<div class="q ${q.status === 'done' ? 'done' : !q.ready && q.status === 'open' ? 'locked' : ''}" data-q="${q.id}"><span class="st">${icon(q)}</span><div><div class="t">${q.title}</div><div class="m">${NPCS[q.npc].avatar} ${NPCS[q.npc].name}${typeof q.feeNow === 'number' && q.feeNow ? ' · ' + fmt$(q.feeNow) + (q.est ? ' est.' : '') : ''}${q.status === 'open' && !q.ready ? ' · after: ' + q.waitingOn.join(', ') : ''}</div></div></div>`).join('');
   document.querySelectorAll('.q').forEach(el => el.onclick = () => { const q = questById[el.dataset.q]; selNpc = q.npc; composeQuest = q.id; $('cQuest').dataset.keep = '#'; render(); });
   const vs = g.plan.eval.violations;
   $('viol').innerHTML = !plan.length ? '<li style="color:var(--mute)">Place a home, a well and a septic drainfield on the lot.</li>' : vs.length ? vs.map(v => `<li title="${esc(v.ref)}">${esc(v.msg)}</li>`).join('') : '<li style="color:var(--green)">✓ Site plan meets the rules we check</li>';
@@ -313,7 +315,8 @@ function introModal() {
   <li><b>Shop</b> real Washington sheds and homes 🛒, then place your home, a well and a septic drainfield. Respect the setbacks.</li>
   <li>Every move is an <b>email</b> to a real agency or a contractor. Pick a request, attach documents, send.</li>
   <li>Replies arrive on the clock. Press <b>⏭ Next mail</b> to wait. Approvals unlock the next steps.</li>
-  <li>Win: pass final inspection by day ${SCENARIO.deadlineDay} without running out of ${fmt$(SCENARIO.budget)}.</li></ol>
+  <li><b>Finance it.</b> You have ${fmt$(SCENARIO.budget)} cash — not enough for a home. Get pre-qualified at a bank 🏦, apply with your plans, close after the building permit. Interest runs monthly.</li>
+  <li>Win: pass final inspection by day ${SCENARIO.deadlineDay} without running out of money.</li></ol>
   <p class="claude">Agency names and contacts are real; fees follow King County's 2026 fee guides; contractors are fictional. Replies are a game simulation, not permitting advice.</p>
   <p style="text-align:right"><button id="goMap">🗺 Pick land on the map</button> <button class="primary" id="go">Start on this lot</button></p>`);
   $('go').onclick = () => { $('modal').style.display = 'none'; };
@@ -321,7 +324,7 @@ function introModal() {
 }
 function endModal() {
   const o = g.outcome;
-  modal(o.won ? `<h1>🎉 You live here now.</h1><p>Final inspection passed on <b>day ${o.day}</b>.</p><p>Spent ${fmt$(g.spent)} · ${fmt$(g.budget)} left · ${Object.values(g.threads).flat().filter(m => m.from === 'me').length} emails sent.</p><p style="text-align:right"><button class="primary" id="again">Play again</button></p>`
+  modal(o.won ? `<h1>🎉 You live here now.</h1><p>Final inspection passed on <b>day ${o.day}</b>.</p><p>Spent ${fmt$(g.spent)} · ${fmt$(g.budget)} left · ${Object.values(g.threads).flat().filter(m => m.from === 'me').length} emails sent.</p>${o.mortgage ? `<p>Your construction loan converted to a 30-year mortgage: <b>${fmt$(o.mortgage)}/month</b> (${fmt$(g.loan.interest)} of interest paid during the build).</p>` : ''}<p class="claude">In real life this took ${o.day} days of waiting. You did it in minutes. Now you know the path.</p><p style="text-align:right"><button class="primary" id="again">Play again</button></p>`
     : `<h1>⌛ Out of time</h1><p>${o.reason}. You finished ${Object.values(g.quests).filter(s => s === 'done').length} of ${QUESTS.length} steps.</p><p style="text-align:right"><button class="primary" id="again">Try again</button></p>`);
   $('again').onclick = () => { $('modal').style.display = 'none'; startGame(); };
 }

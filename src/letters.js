@@ -10,6 +10,7 @@ export function factsOf(v) {
     case 'no-better': return [`Cannot improve on the current rate of ${v.rate}% (the competing offer is ${v.comp}%).`, 'Explain that we are already at or below the competitor, or at our floor. Suggest buying a discount point instead.'];
     case 'have-crew': return [`The player already hired ${v.crew} for site work, so this bid can't be accepted. Be gracious; invite them to call next time.`];
     case 'not-needed': return [`"${v.title}" is not needed for this parcel.`];
+    case 'briefing': return briefingLines(v).concat(['Speak as the foreman giving a status briefing in priority order: first what to do next, then what we are waiting on, then risks. Keep every item; you may group them.']);
     case 'declined': return [`Declined: ${v.reason}.`, 'Suggest another lender or improving credit.'];
     case 'needs-info': return [`Cannot process "${v.title}" yet.`, `Missing: ${v.missing.join('; ')}.`, 'Resubmit with these attached.'];
     case 'too-early': return [`"${v.title}" cannot start yet.`, `Must be completed first: ${v.first.join('; ')}.`];
@@ -31,6 +32,7 @@ export function scriptedReply(npc, v, m) {
     case 'have-loan': return `It looks like you're already working with ${v.lender} on a construction loan, so we can't open a second one. Good luck with the build!${sign}`;
     case 'no-better': return `Thanks for sending the competing Loan Estimate. Our rate is ${v.rate}% and theirs is ${v.comp}%, so we can't go lower right now. If you want a lower rate, you can buy a discount point.${sign}`;
     case 'have-crew': return `Sounds like you went with ${v.crew}. No hard feelings — keep our number for the next project.${sign}`;
+    case 'briefing': return `Here's where we stand.\n\n${briefingLines(v).join('\n')}${sign}`;
     case 'not-needed': return `Good news: "${v.title}" isn't needed for your parcel.${sign}`;
     case 'declined': return `We're unable to pre-qualify you: ${v.reason}. Another lender may have different criteria.${sign}`;
     case 'needs-info': return `We can't process "${v.title}" yet. Please send:\n${list(v.missing)}\n\nNo fee has been charged.${sign}`;
@@ -45,4 +47,14 @@ export function scriptedReply(npc, v, m) {
     case 'answer': return `Thanks for your question. Our general guidance is on our website${npc?.url ? `: ${npc.url}` : ''}. For anything parcel-specific, please submit a request.${sign}`;
     default: return '';
   }
+}
+
+export function briefingLines(v) {
+  const L = [`Day ${v.day} of ${v.deadline} (${v.daysLeft} left). Cash ${$(v.budget)}${v.loan ? `; construction loan ${$(v.loan.amount)} at ${(v.loan.rate * 100).toFixed(2)}% with ${v.loan.lender}` : '; no construction loan yet'}${v.landLine ? `; land line ${$(v.landLine)} open` : ''}.`,
+    `Core steps done: ${v.progress.done} of ${v.progress.total}.${v.home ? ` Home: ${v.home}.` : ''}${v.crew ? ` Site crew: ${v.crew}.` : ''}`];
+  if (v.ready.length) L.push('Do next: ' + v.ready.slice(0, 8).join('; ') + (v.ready.length > 8 ? `; +${v.ready.length - 8} more` : '') + '.');
+  if (v.pending.length) L.push('Waiting on: ' + v.pending.map(p => `${p.title}${p.day != null ? ` (reply ~day ${p.day})` : ''}`).join('; ') + '.');
+  if (v.blocked.length) L.push('Blocked: ' + v.blocked.slice(0, 4).map(b => `${b.title} needs ${b.waitingOn.join(', ')}`).join('; ') + '.');
+  for (const w of v.warnings) L.push('Heads up: ' + w);
+  return L;
 }

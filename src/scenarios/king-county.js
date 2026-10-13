@@ -19,6 +19,11 @@ export const SCENARIO = {
 import { OFFICIALS } from '../officials.js';
 
 export const AGENCIES = {
+  foreman: {
+    name: 'Dale Hartley — your foreman', org: 'Owner\'s rep and project foreman (fictional)', real: false, email: 'dale@yourcrew.example', long: true,
+    persona: 'Your project foreman. Thirty years of rural builds. Calm, dry, practical; gives the plan in priority order, flags what will bite you (cash before the loan, rain, missing papers), never sugarcoats.',
+    avatar: '👷',
+  },
   permitting: {
     name: 'King County Permitting', org: 'Dept. of Local Services, Permitting Division', real: true,
     email: 'PermitQuestions@kingcounty.gov', phone: '206-296-6600', url: 'https://kingcounty.gov/en/dept/local-services/buildings-property/permits',

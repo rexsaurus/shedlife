@@ -52,6 +52,14 @@
  #modal h1{margin:0 0 8px;font-size:24px} #modal p{margin:6px 0}
  #parcel{font-size:12px;color:var(--mute);margin-bottom:10px}
  .claude{font-size:10px;color:var(--mute)}
+ #inboxTab{position:fixed;top:10px;left:10px;display:none;padding:10px 12px;font-weight:700;z-index:3}
+ body.inbox-closed #inbox{display:none} body.inbox-closed #inboxTab{display:block} body.inbox-closed #bar{left:10px}
+ .th.pin{background:#fff6dc} .th.pin.sel{background:#f3e7bd}
+ #modal .card.wide{max-width:860px;width:92vw;max-height:86vh;overflow:auto}
+ .sumgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+ .sumgrid div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px} .sumgrid small{display:block;color:var(--mute);font-size:10px;text-transform:uppercase;letter-spacing:.05em} .sumgrid b{font-size:16px}
+ .sumcols{display:grid;grid-template-columns:1fr 1fr;gap:14px} .sumcols ul{margin:4px 0 10px;padding-left:18px} .sumcols li{margin:2px 0}
+ .warn{background:#fff3d6;border:1px solid #ecd49a;border-radius:8px;padding:8px 10px;margin:4px 0}
  canvas.pt{width:30px;height:30px;image-rendering:pixelated;border-radius:5px;flex:none;box-shadow:0 0 0 1px #0003}
  canvas.ptBig{width:84px;height:84px;image-rendering:pixelated;border-radius:8px;box-shadow:0 0 0 2px #1f2a24;flex:none}
  #threadHead{display:flex;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:#f6f2e8;align-items:center;min-height:100px}
@@ -75,14 +83,14 @@
  <div id="title">Shed<span>Life</span></div>
  <div class="stat"><small>Day</small><b id="sDay">0</b> <span class="claude">/ <span id="sDeadline">240</span></span></div>
  <div class="stat"><small>Budget</small><b id="sBudget">$0</b></div>
- <div class="stat"><small>Permits</small><b id="sProgress">0/0</b></div>
+ <div class="stat"><small>Steps</small><b id="sProgress">0/0</b></div>
  <div class="stat"><small>Loan</small><b id="sLoan" style="font-size:12px">none</b></div>
  <div class="stat"><small>NPC voice</small><b id="sVoice" style="font-size:12px">…</b></div>
- <button id="topMap">🗺 Washington</button><button id="topShop">🛒 Shop</button>
+ <button id="topSummary">📋 Summary</button><button id="topMap">🗺 Washington</button><button id="topShop">🛒 Shop</button>
 </div>
 
 <div id="inbox" class="panel">
- <header><h2 style="margin:0">Inbox <span id="unread"></span></h2><span><button data-tab="agencies" class="on">📨 Agencies</button> <button data-tab="officials">🏛️ Officials</button></span></header>
+ <header><h2 style="margin:0"><button id="inboxClose" title="Hide inbox" style="padding:1px 7px;margin-right:4px">⟨</button>Inbox <span id="unread"></span></h2><span><button data-tab="agencies" class="on">📨 Agencies</button> <button data-tab="officials">🏛️ Officials</button></span></header>
  <div id="threads"></div>
  <div id="threadHead"></div>
  <div id="thread"></div>
@@ -95,9 +103,10 @@
  </div>
 </div>
 
+<button id="inboxTab" class="panel" title="Show inbox">✉ Inbox <span id="tabCount" class="badge b-answer" style="display:none"></span></button>
 <div id="quests" class="panel">
  <div id="parcel">Loading parcel…</div>
- <h2>Permit path</h2><div id="qlist"></div>
+ <div id="qlist"></div>
  <h2 style="margin-top:12px">Site plan check</h2><ul id="viol"></ul>
  <h2>Documents</h2><ul id="docs"></ul>
 </div>

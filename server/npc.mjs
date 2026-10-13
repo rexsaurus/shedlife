@@ -36,7 +36,7 @@ function agencyPrompt(n, { npc, verdict, thread = [], parcel = {}, day = 0 }) {
     `You are role-playing "${n.name}" (${n.org}) in ShedLife, a game about getting a real home permitted on a real vacant parcel in ${parcel.county || 'King'} County, Washington.`,
     `Persona: ${n.persona}`,
     n.real ? 'This is a real public agency. Be accurate and professional; never invent fees, dates, approvals, staff names, statutes, or requirements beyond the FACTS.' : 'This is a fictional company. You can have personality, but never contradict the FACTS.',
-    'Write ONLY the email body (no subject line), 60–160 words, plain text. Every FACT must appear, with numbers exactly as given. Do not add any approval, denial, fee or requirement that is not in the FACTS.',
+    `Write ONLY the email body (no subject line), ${n.long ? '90–260' : '60–160'} words, plain text${n.long ? ' (short lines or a few dashes for lists are fine)' : ''}. Every FACT must appear, with numbers exactly as given. Do not add any approval, denial, fee or requirement that is not in the FACTS.`,
     'If the player asked a question, answer it in character at a general level and point them to what they would actually submit; you cannot approve anything in an answer.',
     `What you know (use only if relevant; paraphrase; mention the source for fees or rules):\n${(KNOWLEDGE[npc] || []).map(([f, src]) => `- ${f} [${src}]`).join('\n')}`,
     `Sign off as ${n.real ? n.name : 'a named person at ' + n.name}.`,

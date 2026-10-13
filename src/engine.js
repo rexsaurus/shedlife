@@ -76,6 +76,7 @@ export function send(g, { npc, questId = null, body = '', subject, attachments =
 }
 
 function verdict(g, q, attachments, body) {
+  if (!q && g._to === 'foreman') return { kind: 'briefing', days: 0, ...summary(g) };
   if (!q) return NPCS[g._to]?.official ? { kind: 'chat', days: 0, question: body } : { kind: 'answer', days: 2, question: body };
   const base = { quest: q.id, title: q.title, cite: q.cite };
   if (g.quests[q.id] === 'done') return { ...base, kind: 'duplicate', days: 1 };
@@ -168,3 +169,33 @@ export function questLog(g) {
   });
 }
 export { fmt$ };
+
+/** Whole-game status: used by the Summary button and the foreman's briefings. Pure. */
+export function summary(g) {
+  const log = questLog(g), title = q => `${q.title} (${NPCS[q.npc].name.split(' —')[0]})`;
+  const ready = log.filter(q => q.status === 'open' && q.ready && q.loan !== 'points');
+  const pendingMail = Object.entries(g.threads).flatMap(([npc, ms]) => ms.filter(m => !m.delivered).map(m => ({ npc, m })));
+  const pending = log.filter(q => q.status === 'pending').map(q => {
+    const pm = pendingMail.find(x => x.m.verdict?.quest === q.id); return { title: title(q), day: pm?.m.deliverDay ?? null };
+  });
+  const blocked = log.filter(q => q.status === 'open' && !q.ready).slice(0, 6).map(q => ({ title: title(q), waitingOn: q.waitingOn }));
+  const core = log.filter(q => !q.loan && !q.crew);
+  const warnings = [];
+  if (!g.plan.items.length) warnings.push('No site plan yet: shop for a home and place it with a well and a septic drainfield.');
+  else if (!g.plan.eval.ok) warnings.push(`Site plan has ${g.plan.eval.violations.length} problem(s): ${g.plan.eval.violations[0].msg}`);
+  if (!g.loan && g.budget < 40000) warnings.push(`Cash is down to ${fmt$(g.budget)} and the construction loan hasn't funded. Hold paid site work until it does, or open the $40k land equity line.`);
+  if (!Object.values(g.quests).some((s, i) => s !== 'open' && QUESTS[i]?.loan === 'prequal')) warnings.push('No lender yet: get pre-qualified at a bank early; you need a construction loan for the home.');
+  if (g.quests.cad === 'done' && !g.crew) warnings.push('No site-work crew hired yet: get bids from the three crews and hire one.');
+  if (g.docs.includes('home-set') && !g.docs.includes('homeowners')) warnings.push('You need homeowners insurance before you can move in.');
+  const left = g.scenario.deadlineDay - g.day;
+  if (left < 45 && !g.outcome) warnings.push(`Only ${left} days left before the deadline.`);
+  const nd = nextMailDay(g);
+  return {
+    day: g.day, deadline: g.scenario.deadlineDay, daysLeft: left, budget: g.budget, spent: g.spent,
+    loan: g.loan ? { lender: NPCS[g.loan.bank].name, amount: g.loan.amount, rate: g.loan.rate, interest: g.loan.interest } : null,
+    landLine: g.landLine?.open ? g.landLine.amount : 0, crew: g.crew ? NPCS[g.crew].name : null, site: g.site,
+    progress: { done: core.filter(q => q.status === 'done').length, total: core.length },
+    ready: ready.map(title), pending, blocked, nextMailDay: Number.isFinite(nd) ? nd : null, docs: g.docs.map(docName), warnings,
+    home: g.plan.eval.flags.home?.name || null,
+  };
+}

@@ -72,6 +72,12 @@
  .dot.red{background:var(--red)}
  .msg .acts{margin-top:6px;display:flex;gap:6px} .msg.inv{border-color:#d9c48a;background:#fffbef}
  table.bills{width:100%;border-collapse:collapse;font-size:13px} table.bills td,table.bills th{padding:6px;border-bottom:1px solid var(--line);text-align:left} table.bills .od{color:var(--red);font-weight:700}
+ a.lawlink{color:#5b3a6b;text-decoration:none;border-bottom:1px dotted #5b3a6b;white-space:nowrap} .lawchips{margin-top:4px;display:flex;flex-wrap:wrap;gap:4px} .lawchips a{font-size:10px;background:#efe6f3;border-radius:9px;padding:1px 7px;border:0}
+ #lawGrid{display:grid;grid-template-columns:240px 1fr;gap:12px;min-height:60vh} #lawList{overflow:auto;max-height:66vh;border-right:1px solid var(--line);padding-right:8px}
+ #lawList .li{padding:5px 6px;border-radius:6px;cursor:pointer;font-size:12px} #lawList .li:hover{background:#f3eee2} #lawList .li.sel{background:#e9dff0} #lawList h3{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:10px 0 2px}
+ #lawText blockquote{margin:8px 0;padding:10px 14px;background:#fff;border-left:4px solid #5b3a6b;border-radius:4px;font-family:Georgia,serif;font-size:14px;line-height:1.5;white-space:pre-wrap}
+ #waSuggest{position:relative} #waSuggest ul{position:absolute;left:0;right:0;top:2px;background:#fff;border:1px solid #cfc8b8;border-radius:6px;list-style:none;margin:0;padding:2px 0;z-index:5;box-shadow:0 6px 18px #0002;max-height:300px;overflow:auto}
+ #waSuggest li{padding:5px 8px;cursor:pointer;font-size:12px} #waSuggest li.on,#waSuggest li:hover{background:#e6efe8} #waSuggest li small{color:var(--mute)}
  .warn{background:#fff3d6;border:1px solid #ecd49a;border-radius:8px;padding:8px 10px;margin:4px 0}
  canvas.pt{width:30px;height:30px;image-rendering:pixelated;border-radius:5px;flex:none;box-shadow:0 0 0 1px #0003}
  canvas.ptBig{width:84px;height:84px;image-rendering:pixelated;border-radius:8px;box-shadow:0 0 0 2px #1f2a24;flex:none}
@@ -99,7 +105,7 @@
  <div class="stat"><small>Steps</small><b id="sProgress">0/0</b></div>
  <div class="stat"><small>Loan</small><b id="sLoan" style="font-size:12px">none</b></div>
  <div class="stat"><small>NPC voice</small><b id="sVoice" style="font-size:12px">…</b></div>
- <button id="topSummary">📋 Summary</button><button id="topBills">💵 Bills <span id="billCount" class="badge b-answer" style="display:none"></span></button><button id="topMap">🗺 Washington</button><button id="topShop">🛒 Shop</button>
+ <button id="topSummary">📋 Summary</button><button id="topLaw">⚖️ Law</button><button id="topBills">💵 Bills <span id="billCount" class="badge b-answer" style="display:none"></span></button><button id="topMap">🗺 Washington</button><button id="topShop">🛒 Shop</button>
 </div>
 
 <div id="inbox" class="panel">
@@ -142,7 +148,8 @@
 <div id="wamap"><div id="wamapCanvas"></div>
  <div id="wapanel" class="panel">
   <h2>Washington · pick your land</h2>
-  <form id="waSearch" style="display:flex;gap:4px"><input id="waQuery" placeholder="Town or address in WA" style="flex:1;font:inherit;padding:4px;border:1px solid #cfc8b8;border-radius:6px"><button>Go</button></form>
+  <form id="waSearch" style="display:flex;gap:4px" autocomplete="off"><input id="waQuery" placeholder="Search any WA city, town or island…" style="flex:1;font:inherit;padding:4px;border:1px solid #cfc8b8;border-radius:6px"><button>Go</button></form>
+  <div id="waSuggest"></div>
   <label style="display:block;margin:6px 0"><input type="checkbox" id="waVacant" checked> Vacant only (no building value)</label>
   <div id="waStatus" class="claude"></div>
   <div id="waJumps" style="display:flex;flex-wrap:wrap;gap:4px;margin:6px 0"></div>

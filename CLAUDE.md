@@ -34,6 +34,12 @@ user-scoped `sk-ant-usr` keys), `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`),
 | Loans (`LENDERS` in the scenario, `prequalMax`/`loanAmountFor`/`monthlyPayment` in engine) | Fictional lenders, real loan mechanics: prequal (43% DTI) → apply + appraisal → close after permit; interest-only monthly; converts to 30-yr mortgage |
 | `server/wa-parcels.mjs`, `src/wamap.js` | Statewide WaTech parcels on an OpenStreetMap basemap; pick any parcel (King adds zoning from county GIS) |
 | `docs/diagram/` | 3D "rat's nest → engine → game" diagram (render with Playwright to `docs/shedlife-stack.png`) |
+| `src/scenarios/king-county-forms.js` | Government application forms (fields, answers, hints), reference/license numbers issued on approval, `checkForm`/`autofill` |
+| Bills (`openInvoices`, `payInvoice`, `negotiateInvoice`, `followUp`, `threaten` in engine; `BILL_TERMS` in scenario) | Non-government work is invoiced net 30; negotiate once; 1.5%/mo late fees; overdue → work on hold; >30 days → lien blocks the loan; win requires all bills paid |
+| `src/laws.js`, `data/laws.json` | Law view: verbatim RCW/WAC excerpts from app.leg.wa.gov (KCC/IRC summarized), `LAW_REFS` per NPC, `lawLinkify` turns cites into links |
+| `src/wildlife.js` | Decorative deer, rabbits, squirrels, coyotes (dusk/night), birds, drifting clouds |
+| `data/wa-places.json` | WA cities (kelvins/US-Cities-Database) + islands geocoded via OSM/Photon, for map autocomplete (live Photon fallback) |
+| `src/autoplay.js` | Scripted player used by tests and `npm run simulate` (fills forms, negotiates and pays bills, waits for the loan before site work) |
 | `docs/wa-king-county.md` | Research notes and sources behind every rule, fee and contact |
 
 ## Invariants (do not break)

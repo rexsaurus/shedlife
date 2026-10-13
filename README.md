@@ -13,6 +13,8 @@
 - **Shop real Washington vendors** — sheds, tiny homes, park models, modular homes, ADUs with real sizes and prices (and the hard lesson: in King County a tiny home on wheels is an RV, not a home).
 - **Email every agency** in the real order; a deterministic engine built on real rules and 2026 fees decides; Claude voices every reply.
 - **Talk to officials** — every seat on the King, Seattle, Bellevue, Snohomish and Pierce councils, four county commissions and the King County Hearing Examiner, as animated 16-bit portraits. The bodies are real; the people are fictional.
+- **Fill in the forms, pay the bills** — agencies take real-style applications that need your parcel number and the reference numbers from earlier approvals; contractors invoice net 30, you can negotiate once, and unpaid bills turn into liens that block your loan.
+- **Read the law** — a Law view quotes the actual RCW/WAC sections (from app.leg.wa.gov) and every cite in every email links to it.
 - **Finance it** — you start with $100k cash. Pre-qualify at a bank, apply with plans, close after the permit; interest runs monthly; win with a mortgage.
 
 ## How it plays

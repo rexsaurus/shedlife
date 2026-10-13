@@ -6,6 +6,8 @@ import { BODIES, bodyById } from './officials.js';
 import { portraitSpec, mountPortrait, talk } from './portraits.js';
 import { initMap, openMap, mapDebug } from './wamap.js';
 import { autoplay } from './autoplay.js';
+import { createWildlife } from './wildlife.js';
+import { LAWS, lawById, LAW_REFS, lawLinkify } from './laws.js';
 import { makeStructure, tint, ghostify } from './meshes.js';
 import { evaluate, footprint } from './rules.js';
 import { SCENARIO, NPCS, QUESTS, questById } from './scenarios/king-county.js';
@@ -85,11 +87,13 @@ function buildWorld(data) {
     t.add(a, b); t.position.set(x, heightAt(x, -y), -y); t.traverse(m => m.castShadow = true); lotTrees.add(t);
   }
   streamMesh = null; stumps = null; padDone = false; roadMesh = null;
+  const treePos = []; world.children.forEach(o => { if (o.isGroup && o !== lotTrees && o.children.length === 2) treePos.push({ x: o.position.x, z: o.position.z }); });
+  wild = createWildlife(world, { bounds: [bx0, bx1, -by1, -by0], heightAt, trees: treePos });
   areaM2 = polygonArea(ringM); hs = elevation.heights;
 }
 
 // ---------------------------------------------------------------- game state
-let lotTrees = null, streamMesh = null, stumps = null, padDone = false, roadMesh = null;
+let wild = null, lotTrees = null, streamMesh = null, stumps = null, padDone = false, roadMesh = null;
 let g, clock, plan = [], uid = 0, tool = null, rot = 0, ghost = null, valid = false, selNpc = 'permitting', erase = false;
 const lot = () => ({ ring: ringM, zoning: parcel.zoning || 'RA-5' });
 
@@ -297,12 +301,14 @@ function render() {
   if ($('threadHead').dataset.npc !== selNpc) {
     const b = n.official ? bodyById[n.body] : null;
     $('threadHead').innerHTML = `<canvas class="ptBig" id="ptHead"></canvas><div><b>${n.name}</b><br><span class="claude">${n.official ? `${b.name} · ${n.seat}<br><i>Fictional official · real body.</i> ${esc(b.role)}` : `${n.org}${n.email ? ' · ' + n.email : ''}${n.channel ? ' · ' + n.channel : ''}${n.real ? '<br><i>Real agency · illustrative staffer portrait</i>' : ''}`}</span></div>`;
+    const refs = LAW_REFS[selNpc] || (n.official ? LAW_REFS[n.body] || LAW_REFS[bodyById[n.body].kind] : []) || [];
+    if (refs.length) $('threadHead').querySelector('div').insertAdjacentHTML('beforeend', `<div class="lawchips">${refs.filter(r => lawById[r]).map(r => `<a href="#" class="lawlink" data-law="${r}">📜 ${r}</a>`).join('')}</div>`);
     $('threadHead').dataset.npc = selNpc; headPortrait = mountPortrait($('ptHead'), specFor(selNpc));
   }
   $('thread').innerHTML = msgs.map(m => m.from === 'me'
       ? `<div class="msg me"><div class="hd"><b>You</b><span>Day ${m.day}</span></div>${n.official ? '' : `<b>${esc(m.subject)}</b>\n`}${esc(m.body)}${m.attachments?.length ? `<div class="att">📎 ${m.attachments.map(docName).join(', ')}</div>` : ''}</div>`
       : m.delivered
-        ? `<div class="msg ${m.invoice ? 'inv' : ''}"><div class="hd"><b>${n.official ? n.shortName : n.name}${label(m.verdict?.kind) ? `<span class="badge b-${m.verdict?.kind}">${label(m.verdict?.kind)}</span>` : ''}</b><span>Day ${m.deliverDay}${m.voiced ? ' · ✦ Claude' : ''}</span></div>${n.official ? '' : `<b>${esc(m.subject)}</b>\n`}${esc(m.body)}${m.invoice ? invoiceActions(m.invoice) : ''}</div>`
+        ? `<div class="msg ${m.invoice ? 'inv' : ''}"><div class="hd"><b>${n.official ? n.shortName : n.name}${label(m.verdict?.kind) ? `<span class="badge b-${m.verdict?.kind}">${label(m.verdict?.kind)}</span>` : ''}</b><span>Day ${m.deliverDay}${m.voiced ? ' · ✦ Claude' : ''}</span></div>${n.official ? '' : `<b>${esc(m.subject)}</b>\n`}${lawLinkify(esc(m.body))}${m.invoice ? invoiceActions(m.invoice) : ''}</div>`
         : `<div class="msg pending">⏳ Waiting for a reply from ${n.name}… (expected around day ${m.deliverDay})</div>`).join('') || `<div class="claude" style="padding:8px">${n.official ? 'Say hello. Officials write the rules, but can\'t decide your permit.' : 'No messages yet.'}</div>`;
   $('thread').scrollTop = 1e9;
   bindBillButtons($('thread'));
@@ -331,7 +337,7 @@ function billsModal() {
   bindBillButtons($('modalCard'));
 }
 const label = k => ({ invoice: 'INVOICE', receipt: 'PAID', negotiated: 'TERMS', lien: 'LIEN', 'form-errors': 'FORM ERRORS', 'on-hold': 'ON HOLD', briefing: 'BRIEFING', accepted: 'APPROVED', 'needs-info': 'NEEDS INFO', 'too-early': 'NOT YET', corrections: 'CORRECTIONS', 'cant-pay': 'CAN’T PAY', pending: 'IN REVIEW', duplicate: 'DONE', answer: 'ANSWER', welcome: 'WELCOME' }[k] || '');
-const linkify = t => esc(t).replace(/\((https?:[^)\s]+)\)/g, (m, u) => `(<a href="${u}" target="_blank" rel="noopener">source</a>)`);
+const linkify = t => lawLinkify(esc(t)).replace(/\((https?:[^)\s]+)\)/g, (m, u) => `(<a href="${u}" target="_blank" rel="noopener">source</a>)`);
 const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
 let composeOverride = null; // npc id for which the player chose "write another message"
@@ -518,6 +524,28 @@ $('inboxClose').onclick = () => { document.body.classList.add('inbox-closed'); f
 $('inboxTab').onclick = openInbox;
 $('topSummary').onclick = () => summaryModal();
 $('topBills').onclick = () => billsModal();
+let lawSel = null;
+function lawModal(id) {
+  lawSel = id || lawSel || LAWS[0].id;
+  const topics = [...new Set(LAWS.map(l => l.topic))];
+  modal(`<div style="display:flex;justify-content:space-between;align-items:center"><h1 style="margin:0">⚖️ The law</h1><span><input id="lawQ" placeholder="Search the law…" style="font:inherit;padding:4px 6px;border:1px solid #cfc8b8;border-radius:6px;width:220px"> <button id="lawClose">✕</button></span></div>
+   <p class="claude">Washington statutes (RCW) and rules (WAC), quoted from app.leg.wa.gov. King County code and ICC building-code entries are plain-English summaries with links. Not legal advice.</p>
+   <div id="lawGrid"><div id="lawList"></div><div id="lawText"></div></div>`);
+  $('modalCard').classList.add('wide'); $('modalCard').dataset.kind = 'law';
+  const list = (q = '') => { const ql = q.toLowerCase(); $('lawList').innerHTML = topics.map(t => { const ls = LAWS.filter(l => l.topic === t && (!ql || (l.id + l.title + l.excerpt + l.plain).toLowerCase().includes(ql))); return ls.length ? `<h3>${t}</h3>` + ls.map(l => `<div class="li ${l.id === lawSel ? 'sel' : ''}" data-l="${l.id}"><b>${l.id}</b><br>${esc(l.title)}</div>`).join('') : ''; }).join('') || '<p class="claude">No matches.</p>';
+    $('lawList').querySelectorAll('[data-l]').forEach(el => el.onclick = () => { lawSel = el.dataset.l; list($('lawQ').value); show(); }); };
+  const show = () => { const l = lawById[lawSel]; const who = Object.entries(LAW_REFS).filter(([, v]) => v.includes(l.id)).map(([k]) => NPCS[k]?.name.split(' —')[0] || ({ 'king-council': 'King County Council', 'king-hex': 'Hearing Examiner', council: 'city & county councils', commission: 'county commissions' })[k]).filter(Boolean);
+    $('lawText').innerHTML = `<h2 style="font-size:16px;color:var(--ink);text-transform:none;letter-spacing:0">${l.id} — ${esc(l.title)}</h2>
+      ${l.excerpt ? `<blockquote>${esc(l.excerpt)}</blockquote>` : ''}${l.verbatim ? '<span class="claude">Verbatim excerpt from the official code.</span>' : `<span class="claude">${esc(l.note || 'Summary, not the official text.')}</span>`}
+      <p><b>Why it matters:</b> ${esc(l.plain)}</p>
+      ${who.length ? `<p class="claude">Comes up with: ${who.map(esc).join(', ')}</p>` : ''}
+      <p><a href="${l.url}" target="_blank" rel="noopener">Read it at the source ↗</a> <span class="claude">· checked ${l.checked}</span></p>`; };
+  list(); show();
+  $('lawQ').oninput = () => list($('lawQ').value);
+  $('lawClose').onclick = () => { $('modal').style.display = 'none'; $('modalCard').classList.remove('wide'); $('modalCard').dataset.kind = ''; };
+}
+document.addEventListener('click', e => { const a = e.target.closest('a.lawlink'); if (!a) return; e.preventDefault(); lawModal(a.dataset.law); });
+$('topLaw').onclick = () => lawModal();
 function endModal() {
   const o = g.outcome;
   modal(o.won ? `<h1>🎉 You live here now.</h1><p>Final inspection passed on <b>day ${o.day}</b>.</p><p>Spent ${fmt$(g.spent)} · ${fmt$(g.budget)} left · ${Object.values(g.threads).flat().filter(m => m.from === 'me').length} emails sent.</p>${o.mortgage ? `<p>Your construction loan converted to a 30-year mortgage: <b>${fmt$(o.mortgage)}/month</b> (${fmt$(g.loan.interest)} of interest paid during the build).</p>` : ''}<p class="claude">In real life this took ${o.day} days of waiting. You did it in minutes. Now you know the path.</p><p style="text-align:right"><button class="primary" id="again">Play again</button></p>`
@@ -597,6 +625,7 @@ renderer.setAnimationLoop(now => {
     dayNight(clock.speed >= 10080 ? 13 : hour);
     { const d = new Date(clock.t), h = d.getUTCHours(); $('clock').textContent = `Day ${gameDay()} · ${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'} ${h >= 6 && h < 18 ? '☀️' : '🌙'}`; }
   }
+  if (wild && clock) { const h = new Date(clock.t).getUTCHours() + new Date(clock.t).getUTCMinutes() / 60; wild.update((now - last) / 1000, clock.speed >= 10080 ? 13 : h, clock.speed / 60); }
   last = now; renderer.render(scene, cam);
 });
 

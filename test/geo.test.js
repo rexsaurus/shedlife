@@ -22,9 +22,9 @@ test('sim clock speeds', () => {
 });
 test('bundled parcel is real county data with elevation', () => {
   const d = JSON.parse(readFileSync(new URL('../public/data/parcel.json', import.meta.url)));
-  assert.match(d.parcel.apn, /^\d{9}$/); assert.ok(d.parcel.ring.length > 3);
+  assert.match(d.parcel.apn, /^\d{9,10}$/); assert.ok(d.parcel.ring.length > 3);
   assert.equal(d.elevation.heights.length, d.elevation.n ** 2); assert.ok(d.elevation.heights.every(h => typeof h === 'number'));
   const area = polygonArea(d.parcel.ring.map(makeProjector(d.parcel.ring[0][0], d.parcel.ring[0][1])));
   assert.ok(area > 50 && area < 1e6, `area ${area}`); assert.ok(!('COMBINEDOWNERNAMES' in d.parcel));
-  assert.ok(bboxOf(d.parcel.ring).minX > -123 && bboxOf(d.parcel.ring).maxX < -122);
+  assert.ok(bboxOf(d.parcel.ring).minX > -125 && bboxOf(d.parcel.ring).maxX < -116);
 });

@@ -1,5 +1,5 @@
-// Sim clock: 1x = 1 game minute per real second. Speeds: 0 (pause), 1, 10, 60, 600.
-export const SPEEDS = [0, 1, 10, 60, 600];
+// Sim clock: 1x = 1 game minute per real second. Speeds in game-minutes per second.
+export const SPEEDS = [0, 1, 10, 60, 600, 1440, 10080]; // 1440 = 1 day per second, 10080 = 1 week per second
 export class SimClock {
   constructor(start = Date.UTC(2026, 9, 12, 15, 0)) { this.t = start; this.speed = 1; }
   setSpeed(s) { if (!SPEEDS.includes(s)) throw new Error(`bad speed ${s}`); this.speed = s; }

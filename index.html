@@ -2,25 +2,96 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ShedLife</title>
 <style>
- body{margin:0;overflow:hidden;font:13px system-ui,sans-serif;background:#cfe3ef}
- #hud{position:fixed;top:10px;left:10px;background:#fffd;border-radius:8px;padding:10px 12px;max-width:300px;box-shadow:0 2px 8px #0002}
- #hud h1{font-size:16px;margin:0 0 4px}
- #bar{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:#fffd;border-radius:8px;padding:8px;display:flex;gap:6px;align-items:center}
- button{border:1px solid #889;background:#fff;border-radius:5px;padding:5px 9px;cursor:pointer}
- button.on{background:#2d6a4f;color:#fff}
- #clock{font-variant-numeric:tabular-nums;min-width:110px;text-align:center;font-weight:600}
- #land{position:fixed;top:10px;right:10px;width:290px;max-height:70vh;overflow:auto;background:#fffd;border-radius:8px;padding:10px 12px;box-shadow:0 2px 8px #0002}
- #land h2{font-size:14px;margin:0 0 4px} #land ul{list-style:none;padding:0;margin:6px 0 0} #land li{border-top:1px solid #ddd;padding:6px 0} #land .empty{color:#666}
+ :root{--paper:#fbf8f1;--ink:#1f2a24;--mute:#6b7069;--line:#e3ddd0;--green:#2d6a4f;--red:#b3261e;--gold:#a8741a;--blue:#2c5d7c;--sky:#cfe3ef}
+ *{box-sizing:border-box} body{margin:0;overflow:hidden;font:13px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;color:var(--ink);background:var(--sky)}
+ button{font:inherit;border:1px solid #b9b3a5;background:#fff;border-radius:6px;padding:5px 9px;cursor:pointer;color:var(--ink)}
+ button:hover{border-color:var(--green)} button.on{background:var(--green);color:#fff;border-color:var(--green)} button.primary{background:var(--green);color:#fff;border-color:var(--green);font-weight:600}
+ button:disabled{opacity:.45;cursor:default}
+ .panel{position:fixed;background:var(--paper);border:1px solid var(--line);border-radius:10px;box-shadow:0 4px 18px #0002}
+ h2{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:0 0 6px}
+ #top{top:10px;left:50%;transform:translateX(-50%);display:flex;gap:16px;align-items:center;padding:8px 14px;white-space:nowrap}
+ #top .stat b{font-size:15px;font-variant-numeric:tabular-nums} #top .stat small{display:block;color:var(--mute);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+ #title{font-weight:800;font-size:16px} #title span{color:var(--green)}
+ /* inbox */
+ #inbox{top:10px;left:10px;bottom:10px;width:380px;display:flex;flex-direction:column;overflow:hidden}
+ #inbox header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+ #threads{overflow:auto;border-bottom:1px solid var(--line);max-height:30%;flex:none}
+ .th{display:flex;gap:9px;padding:8px 12px;cursor:pointer;border-bottom:1px solid #efe9dc;align-items:center}
+ .th:hover{background:#f3eee2} .th.sel{background:#e6efe8} .th .av{font-size:20px;width:26px;text-align:center}
+ .th .nm{font-weight:600} .th .sub{color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+ .dot{width:8px;height:8px;border-radius:50%;background:var(--blue);margin-left:auto;flex:none}
+ .tag{font-size:10px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--mute);margin-left:4px;font-weight:400}
+ #thread{flex:1;overflow:auto;padding:10px 12px}
+ .msg{background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:8px;white-space:pre-wrap}
+ .msg.me{background:#eef4f0;border-color:#cfe0d4;margin-left:24px}
+ .msg .hd{display:flex;justify-content:space-between;color:var(--mute);font-size:11px;margin-bottom:4px;white-space:normal}
+ .msg .att{font-size:11px;color:var(--blue);margin-top:6px}
+ .msg.pending{opacity:.55;font-style:italic}
+ .badge{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;color:#fff;margin-left:6px}
+ .b-accepted{background:var(--green)} .b-needs-info,.b-too-early,.b-pending,.b-duplicate{background:var(--gold)} .b-corrections,.b-cant-pay{background:var(--red)} .b-answer,.b-welcome{background:var(--blue)}
+ #compose{border-top:1px solid var(--line);padding:10px 12px;background:#f6f2e8}
+ #compose select,#compose textarea{width:100%;font:inherit;border:1px solid #cfc8b8;border-radius:6px;padding:5px;background:#fff}
+ #compose textarea{height:76px;resize:vertical;margin:6px 0}
+ #atts{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12px;margin-top:6px} #atts label{white-space:nowrap}
+ #composeRow{display:flex;gap:6px;align-items:center} #realMail{font-size:11px;margin-left:auto}
+ /* quests */
+ #quests{top:10px;right:10px;bottom:10px;width:310px;overflow:auto;padding:12px}
+ .q{display:flex;gap:7px;padding:5px 0;border-bottom:1px solid #efe9dc;cursor:pointer;align-items:flex-start}
+ .q .st{width:18px;text-align:center;flex:none} .q .t{font-weight:600} .q .m{font-size:11px;color:var(--mute)}
+ .q.done .t{color:var(--green);text-decoration:line-through;text-decoration-color:#2d6a4f66} .q.locked{opacity:.55}
+ #docs li,#viol li{font-size:12px;margin:2px 0} #docs,#viol{padding-left:16px;margin:4px 0 10px} #viol li{color:var(--red)}
+ /* build bar */
+ #bar{bottom:10px;left:400px;right:330px;padding:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:center}
+ #bar .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+ #clock{font-variant-numeric:tabular-nums;font-weight:700;min-width:64px;text-align:center}
+ #tip{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:#1f2a24e6;color:#fff;padding:6px 12px;border-radius:8px;pointer-events:none;font-size:12px;max-width:560px;text-align:center;display:none}
+ #toast{position:fixed;top:64px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 14px;border-radius:8px;display:none;box-shadow:0 4px 18px #0004;cursor:pointer;z-index:5}
+ #modal{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;z-index:10}
+ #modal .card{background:var(--paper);border-radius:12px;padding:24px 28px;max-width:520px;box-shadow:0 10px 40px #0006}
+ #modal h1{margin:0 0 8px;font-size:24px} #modal p{margin:6px 0}
+ #parcel{font-size:12px;color:var(--mute);margin-bottom:10px}
+ .claude{font-size:10px;color:var(--mute)}
 </style></head>
 <body>
-<div id="hud"><h1>ShedLife <small>P0</small></h1><div id="info">Loading real parcel…</div></div>
-<div id="land"><h2>Land for sale · Bay Area</h2><small id="lstatus">loading…</small><ul id="listings"></ul></div>
-<div id="bar">
- <button id="tool-place" class="on" title="P">Place shed</button>
- <button id="rotate" title="R">Rotate ⟳</button>
- <button id="clear">Clear</button>
- <span id="clock">—</span>
- <button data-speed="0">⏸</button><button data-speed="1" class="on">▶ 1×</button><button data-speed="10">10×</button><button data-speed="60">60×</button><button data-speed="600">600×</button>
+<div id="top" class="panel">
+ <div id="title">Shed<span>Life</span></div>
+ <div class="stat"><small>Day</small><b id="sDay">0</b> <span class="claude">/ <span id="sDeadline">240</span></span></div>
+ <div class="stat"><small>Budget</small><b id="sBudget">$0</b></div>
+ <div class="stat"><small>Permits</small><b id="sProgress">0/0</b></div>
+ <div class="stat"><small>NPC voice</small><b id="sVoice" style="font-size:12px">…</b></div>
 </div>
+
+<div id="inbox" class="panel">
+ <header><h2 style="margin:0">Inbox <span id="unread"></span></h2><button id="newMail" title="Write to any agency or contractor">✉ New</button></header>
+ <div id="threads"></div>
+ <div id="thread"></div>
+ <div id="compose">
+  <div id="composeRow"><b id="cTo">To: —</b><a id="realMail" target="_blank" rel="noopener"></a></div>
+  <select id="cQuest" style="margin-top:6px"></select>
+  <div id="atts"></div>
+  <textarea id="cBody" placeholder="Write your email…"></textarea>
+  <div style="display:flex;gap:6px;align-items:center"><button id="send" class="primary">Send ✉</button><span id="cHint" class="claude"></span></div>
+ </div>
+</div>
+
+<div id="quests" class="panel">
+ <div id="parcel">Loading parcel…</div>
+ <h2>Permit path</h2><div id="qlist"></div>
+ <h2 style="margin-top:12px">Site plan check</h2><ul id="viol"></ul>
+ <h2>Documents</h2><ul id="docs"></ul>
+</div>
+
+<div id="bar" class="panel">
+ <span id="catalog" style="display:flex;flex-wrap:wrap;gap:5px"></span>
+ <span class="sep"></span>
+ <button id="rotate" title="R">⟳</button><button id="erase" title="X: click a structure to remove it">🗑</button>
+ <span class="sep"></span>
+ <span id="clock">Day 0</span>
+ <button data-speed="0">⏸</button><button data-speed="1440" class="on">1 day/s</button><button data-speed="10080">1 wk/s</button>
+ <button id="skip" title="Jump to the next reply">⏭ Next mail</button>
+</div>
+<div id="tip"></div>
+<div id="toast"></div>
+<div id="modal"><div class="card" id="modalCard"></div></div>
 <script type="module" src="/src/main.js"></script>
 </body></html>

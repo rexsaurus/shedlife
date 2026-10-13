@@ -8,6 +8,7 @@ export function factsOf(v) {
     case 'accepted': return [`Request "${v.title}" is accepted.`, `Fee charged: ${$(v.fee)}${v.est ? ' (estimate)' : ''}.`, ...(v.extra || []), `Result: ${v.gives.join(', ')}.`, `Basis: ${v.cite}.`];
     case 'have-loan': return [`The player already has a construction loan in progress with ${v.lender}; you cannot open a second one. Wish them well.`];
     case 'no-better': return [`Cannot improve on the current rate of ${v.rate}% (the competing offer is ${v.comp}%).`, 'Explain that we are already at or below the competitor, or at our floor. Suggest buying a discount point instead.'];
+    case 'have-crew': return [`The player already hired ${v.crew} for site work, so this bid can't be accepted. Be gracious; invite them to call next time.`];
     case 'not-needed': return [`"${v.title}" is not needed for this parcel.`];
     case 'declined': return [`Declined: ${v.reason}.`, 'Suggest another lender or improving credit.'];
     case 'needs-info': return [`Cannot process "${v.title}" yet.`, `Missing: ${v.missing.join('; ')}.`, 'Resubmit with these attached.'];
@@ -29,6 +30,7 @@ export function scriptedReply(npc, v, m) {
     case 'accepted': return `Thank you, your request for "${v.title}" is approved.\n\nFee: ${$(v.fee)}${v.est ? ' (estimate)' : ''}\n${(v.extra || []).map(x => x + '\n').join('')}You now have: ${v.gives.join(', ')}\n\nReference: ${v.cite}${sign}`;
     case 'have-loan': return `It looks like you're already working with ${v.lender} on a construction loan, so we can't open a second one. Good luck with the build!${sign}`;
     case 'no-better': return `Thanks for sending the competing Loan Estimate. Our rate is ${v.rate}% and theirs is ${v.comp}%, so we can't go lower right now. If you want a lower rate, you can buy a discount point.${sign}`;
+    case 'have-crew': return `Sounds like you went with ${v.crew}. No hard feelings — keep our number for the next project.${sign}`;
     case 'not-needed': return `Good news: "${v.title}" isn't needed for your parcel.${sign}`;
     case 'declined': return `We're unable to pre-qualify you: ${v.reason}. Another lender may have different criteria.${sign}`;
     case 'needs-info': return `We can't process "${v.title}" yet. Please send:\n${list(v.missing)}\n\nNo fee has been charged.${sign}`;

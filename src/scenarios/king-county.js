@@ -12,7 +12,7 @@ export const SCENARIO = {
   budget: 100000, // cash on hand; homes need a construction loan (see LENDERS)
   landValue: 180000, // game estimate for the bundled parcel when the assessor value isn't loaded
   player: { income: 140000, debtsMonthly: 600, credit: 745 }, // fictional borrower profile
-  deadlineDay: 240,
+  deadlineDay: 270,
 };
 
 // ---- NPCs: real public bodies (general intake only) + fictional contractors
@@ -85,6 +85,10 @@ export const AGENCIES = {
     persona: 'Surveyor. Quietly obsessed with pins, monuments and the difference between a fence and a property line.', avatar: '📐' },
   excavator: { name: 'Raging River Excavation', org: 'Clearing, grading, driveways (fictional)', real: false, email: 'dispatch@ragingriver.example',
     persona: 'Excavator owner-operator. Plain-spoken, weather-obsessed, will not move dirt without the permit and erosion control in place.', avatar: '🚜' },
+  'crew-fast': { name: 'Summit Civil Works', org: 'Site development contractor (fictional)', real: false, email: 'estimating@summitcivil.example',
+    persona: 'Estimator for a bigger outfit. Polished, quotes schedules to the day, upsells drainage.', avatar: '🏗️' },
+  'crew-cheap': { name: 'Stumpjumper Land Clearing', org: 'Owner-operator land clearing (fictional)', real: false, email: 'stumpjumper@stumpjumper.example',
+    persona: 'One guy with an excavator and a dump truck. Cheap, honest about rain delays, writes short emails with no punctuation.', avatar: '🪓' },
   biologist: { name: 'Salal & Stream Ecological', org: 'Wetland and stream biologists (fictional)', real: false, email: 'reports@salalstream.example',
     persona: 'Field biologist. Enthusiastic about salmon and amphibians, careful and exact about buffers.', avatar: '🐟' },
   wdfw: { name: 'WA Dept. of Fish & Wildlife', org: 'Habitat Program — Hydraulic Project Approval (HPA)', real: true, email: null,
@@ -132,7 +136,10 @@ export const DOCS = {
   'loan-funded': 'Construction loan funded',
   'loan-estimate-bank-cu': 'Loan Estimate (Evergreen Valley CU)', 'loan-estimate-bank-ridge': 'Loan Estimate (Puget Ridge Bank)',
   'survey': 'Boundary + topo survey (stakes set)', 'buffer-plan': 'Critical area report + buffer plan', 'hpa': 'Hydraulic Project Approval (WDFW)',
-  'grading-permit': 'Clearing & grading permit', 'site-cleared': 'Site cleared, graded + driveway in',
+  'grading-permit': 'Clearing & grading permit', 'site-cleared': 'Site work complete',
+  'bid-excavator': 'Site-work bid (Raging River)', 'bid-crew-fast': 'Site-work bid (Summit Civil)', 'bid-crew-cheap': 'Site-work bid (Stumpjumper)',
+  'crew-hired': 'Site-work crew hired', 'trees-cleared': 'Trees felled + hauled', 'grubbed': 'Stumps grubbed + erosion control in',
+  'pad-graded': 'House pad leveled', 'driveway': 'Gravel driveway in',
   'builders-risk': 'Builder\'s risk insurance policy', 'title-policy': 'Lender\'s title insurance policy', 'homeowners': 'Homeowners insurance policy',
 };
 
@@ -192,8 +199,6 @@ QUESTS.push(
   { id: 'grading', npc: 'permitting', section: 'Site work', title: 'Clearing & grading permit', ask: 'Apply for the clearing and grading permit for the house pad and driveway.',
     needs: ['site-plan', 'cad', 'survey'], after: ['cad', 'survey', 'biologist'], fee: 3000, est: true, days: 30, gives: ['grading-permit'],
     cite: 'King County clearing/grading: RA zones need a clearing permit over 7,000 sq ft cleared or 5,000 board feet of timber; grading over 100 cu yd; drainage review at 2,000 sq ft impervious or 7,000 sq ft disturbed (fee is a game estimate)' },
-  { id: 'clear', npc: 'excavator', section: 'Site work', title: 'Clear, grade + driveway', ask: 'Clear the pad, install erosion control, grade, and cut the gravel driveway.',
-    needs: ['grading-permit'], after: ['grading', 'hpa'], fee: 18000, est: true, days: 10, gives: ['site-cleared'], cite: 'Site work (game estimate); erosion control per KCC 16.82' },
   { id: 'title', npc: 'titleco', section: 'Insurance', title: 'Lender\'s title insurance', ask: 'Open title and order a lender\'s title insurance policy for the construction loan.',
     needs: [], after: ['zoning'], fee: 1800, est: true, days: 7, gives: ['title-policy'], cite: 'Lender\'s title policy is common for construction loans (UNVERIFIED as a universal requirement; game estimate)' },
   { id: 'builders-risk', npc: 'insurer', section: 'Insurance', title: 'Builder\'s risk insurance', ask: 'Bind a builder\'s risk policy for the construction period.',
@@ -201,7 +206,45 @@ QUESTS.push(
   { id: 'homeowners', npc: 'insurer', section: 'Insurance', title: 'Homeowners insurance', ask: 'Bind a homeowners policy now that the home is set.',
     needs: [], after: ['set-home'], fee: 1600, est: true, days: 1, gives: ['homeowners'], cite: 'Required by the lender at completion; you need it to move in (game estimate, first-year premium)' },
 );
-for (const [id, extra] of [['septic-install', ['clear']], ['set-home', ['clear', 'builders-risk']], ['permit', ['grading']]]) questById0(id).after.push(...extra);
+for (const [id, extra] of [['set-home', ['builders-risk']], ['permit', ['grading']]]) questById0(id).after.push(...extra);
+// Physical prerequisites: the installer needs a level pad; the delivery truck needs a road.
+questById0('septic-install').requiresDocs = ['pad-graded'];
+questById0('set-home').requiresDocs = ['pad-graded', 'driveway'];
+
+// ---- Hiring a site-work crew: get bids, hire one, then four work stages on the clock.
+export const CREWS = {
+  excavator: { mult: 1.0, speed: 1.0, rainDays: 0, pitch: 'Mid-priced, reliable, one crew start to finish.' },
+  'crew-fast': { mult: 1.35, speed: 0.6, rainDays: 0, pitch: 'Premium: two machines and a dedicated crew, fastest schedule.' },
+  'crew-cheap': { mult: 0.78, speed: 1.6, rainDays: 7, pitch: 'Lowest price: one operator, squeezes you between other jobs; rain delays likely.' },
+};
+// Quote for a crew from what the CAD found (tree count, stream). Game estimates of typical Western WA site-work costs.
+export function crewQuote(g, c) {
+  const C = CREWS[c], trees = g.site?.trees ?? 60, stream = !!g.site?.stream;
+  const base = { timber: 120 * trees, stumps: 6000 + 40 * trees, grade: 7000, road: 9000 + (stream ? 2500 : 0) };
+  const days = { timber: 4 + Math.ceil(trees / 25), stumps: 4, grade: 5, road: 6 };
+  const cost = Object.fromEntries(Object.entries(base).map(([k, v]) => [k, Math.round(v * C.mult / 50) * 50]));
+  const dur = Object.fromEntries(Object.entries(days).map(([k, v]) => [k, Math.ceil(v * C.speed) + (k === 'grade' ? C.rainDays : 0)]));
+  const total = Object.values(cost).reduce((a, b) => a + b, 0), totalDays = Object.values(dur).reduce((a, b) => a + b, 0);
+  return { cost, dur, total, totalDays, deposit: Math.round(total * 0.1 / 50) * 50 };
+}
+const STAGES = [
+  ['timber', 'Fell + haul the trees', 'Fell the trees in the clearing limits and haul the logs.', ['trees-cleared'], 'King County: a clearing permit covers >7,000 sq ft cleared or >5,000 board feet; Class IV-General conversions usually ride with the permit (game cost estimate)'],
+  ['stumps', 'Grub stumps + erosion control', 'Grub the stumps and install silt fence and construction entrance (TESC).', ['grubbed'], 'Temporary erosion and sediment control per King County Surface Water Design Manual (game estimate)'],
+  ['grade', 'Level the house pad', 'Cut and fill to level the house pad and septic area.', ['pad-graded'], 'Grading over 100 cu yd needs the grading permit (game estimate)'],
+  ['road', 'Gravel driveway + culvert', 'Build the gravel driveway (and the stream culvert, if any) to the pad.', ['driveway', 'site-cleared'], 'Driveway to King County Road Standards; culvert under the HPA if a stream crosses (game estimate)'],
+];
+for (const c of Object.keys(CREWS)) {
+  QUESTS.push(
+    { id: `${c}-bid`, npc: c, section: 'Site work', title: 'Get a site-work bid', ask: 'Walk the site and send a written bid for clearing, stumps, grading and the driveway.',
+      when: g => !g.crew || g.crew === c, needs: [], after: ['cad'], fee: 0, days: 3, gives: [`bid-${c}`], crew: 'bid', cite: 'Get at least two written bids; check the contractor is registered with WA L&I (RCW 18.27)' },
+    { id: `${c}-hire`, npc: c, section: 'Site work', exclusive: 'crew', when: g => !g.crew || g.crew === c, title: 'Hire this crew (10% deposit)', ask: 'Accept your bid and schedule the work. Deposit attached.',
+      needs: [`bid-${c}`], after: [`${c}-bid`], fee: g => crewQuote(g, c).deposit, days: 2, gives: ['crew-hired'], crew: 'hire', crewId: c, cite: 'Written contract with a registered contractor; deposits are common (game estimate 10%)' },
+    ...STAGES.map(([k, title, ask, gives, cite], i) => ({
+      id: `${c}-${k}`, npc: c, section: 'Site work', when: g => g.crew === c, title, ask,
+      needs: i === 0 ? ['grading-permit'] : [], after: i === 0 ? [`${c}-hire`, 'grading', 'hpa'] : [`${c}-${STAGES[i - 1][0]}`],
+      fee: g => crewQuote(g, c).cost[k] - (i === 0 ? crewQuote(g, c).deposit : 0), est: true, days: g => crewQuote(g, c).dur[k], gives, crew: k, cite })),
+  );
+}
 function questById0(id) { return QUESTS.find(q => q.id === id); }
 
 // ---- Financing subgame. Lenders are fictional; terms are game estimates of typical 2026 construction-to-permanent loans.
@@ -226,6 +269,11 @@ for (const b of Object.keys(LENDERS)) { const other = Object.keys(LENDERS).find(
   { id: `${b}-points`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Buy down the rate (1 point)', ask: 'Pay one discount point (1% of the loan) to lower the rate.',
     needs: [], after: [`${b}-prequal`, 'plans'], fee: 'points', days: 2, gives: [], loan: 'points', requiresHome: true, cite: 'Discount points: 1% of the loan for ~0.25% lower rate (game rule; real pricing varies)' },
 ); }
+for (const b of Object.keys(LENDERS)) QUESTS.push(
+  { id: `${b}-landline`, npc: b, section: 'Financing', title: 'Land equity line ($40k)', ask: 'Open a line of credit secured by the land I own, to cover costs before the construction loan funds.',
+    needs: [`prequal-${b}`], after: [`${b}-prequal`], fee: 500, est: true, days: 10, gives: [], loan: 'land', exclusive: 'landline',
+    cite: 'Land equity loans/lines use owned land as collateral; higher rates than mortgages (game estimate: $40k at 9.5%)' });
+export const LAND_LINE = { amount: 40000, rate: 0.095 };
 export const RATE_FLOOR = 0.005; // a lender won't go more than 0.50% under its posted rate
 
 export const questById = Object.fromEntries(QUESTS.map(q => [q.id, q]));

@@ -5,6 +5,7 @@ import { CATALOG, byId, SHOP_TABS, paidOnPlacement } from './catalog.js';
 import { BODIES, bodyById } from './officials.js';
 import { portraitSpec, mountPortrait, talk } from './portraits.js';
 import { initMap, openMap, mapDebug } from './wamap.js';
+import { autoplay } from './autoplay.js';
 import { makeStructure, tint, ghostify } from './meshes.js';
 import { evaluate, footprint } from './rules.js';
 import { SCENARIO, NPCS, QUESTS, questById } from './scenarios/king-county.js';
@@ -82,12 +83,12 @@ function buildWorld(data) {
     const b = new THREE.Mesh(new THREE.ConeGeometry(1.6 * s, 6.5 * s, 6), crown); b.position.y = 4.6 * s;
     t.add(a, b); t.position.set(x, heightAt(x, -y), -y); t.traverse(m => m.castShadow = true); lotTrees.add(t);
   }
-  streamMesh = null;
+  streamMesh = null; stumps = null; padDone = false; roadMesh = null;
   areaM2 = polygonArea(ringM); hs = elevation.heights;
 }
 
 // ---------------------------------------------------------------- game state
-let lotTrees = null, streamMesh = null;
+let lotTrees = null, streamMesh = null, stumps = null, padDone = false, roadMesh = null;
 let g, clock, plan = [], uid = 0, tool = null, rot = 0, ghost = null, valid = false, selNpc = 'permitting', erase = false;
 const lot = () => ({ ring: ringM, zoning: parcel.zoning || 'RA-5' });
 
@@ -100,13 +101,45 @@ function startGame() {
 }
 
 function syncSite() {
-  if (lotTrees) lotTrees.visible = !g.docs.includes('site-cleared');
+  const felled = g.docs.includes('trees-cleared'), grubbed = g.docs.includes('grubbed');
+  if (lotTrees) lotTrees.visible = !felled;
+  if (felled && !grubbed && !stumps && lotTrees) { // stumps where the trees stood
+    stumps = new THREE.Group(); const m = new THREE.MeshLambertMaterial({ color: 0x8a6a48 });
+    lotTrees.children.forEach(t => { const s = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 0.4, 6), m); s.position.copy(t.position).add(new THREE.Vector3(0, 0.2, 0)); stumps.add(s); });
+    world.add(stumps);
+  }
+  if (stumps) stumps.visible = felled && !grubbed;
+  if (g.docs.includes('pad-graded') && !padDone) { padDone = true; levelPads(); }
+  if (g.docs.includes('driveway') && !roadMesh) buildDriveway();
   if (g.quests.cad === 'done' && g.site?.stream && !streamMesh) {
     const xs = ringM.map(p => p[0]), ys = ringM.map(p => p[1]), y0 = Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.72;
     const pts = []; for (let x = Math.min(...xs) - 30; x <= Math.max(...xs) + 30; x += 3) { const y = y0 + Math.sin(x / 9) * 4; pts.push(new THREE.Vector3(x, heightAt(x, -y) + 0.15, -y)); }
     streamMesh = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, 0.9, 6), new THREE.MeshLambertMaterial({ color: 0x3d8bd4 }));
     streamMesh.scale.y = 0.25; streamMesh.position.y = 0; world.add(streamMesh);
   }
+}
+// Flatten terrain under homes/ADUs/drainfields (+3 m margin) to their mean height, and drop the structures onto the pad.
+function levelPads() {
+  const pads = plan.filter(p => ['dwelling', 'adu', 'septic'].includes(p.item.kind)).map(p => {
+    const xs = p.corners.map(c => c[0]), ys = p.corners.map(c => c[1]);
+    const box = [Math.min(...xs) - 3, Math.max(...xs) + 3, Math.min(...ys) - 3, Math.max(...ys) + 3];
+    const hsum = p.corners.reduce((a, [x, y]) => a + heightAt(x, -y), 0) / 4; return { p, box, h: hsum };
+  });
+  const pos = terrain.geometry.attributes.position;
+  for (let k = 0; k < pos.count; k++) { const x = pos.getX(k), y = -pos.getZ(k); for (const pd of pads) if (x >= pd.box[0] && x <= pd.box[1] && y >= pd.box[2] && y <= pd.box[3]) pos.setY(k, pd.h); }
+  pos.needsUpdate = true; terrain.geometry.computeVertexNormals();
+  for (const pd of pads) pd.p.mesh.position.y = pd.h;
+}
+// Gravel driveway from the nearest lot line to the home.
+function buildDriveway() {
+  const home = plan.find(p => p.item.kind === 'dwelling') || plan[0]; if (!home) return;
+  const hx = home.corners.reduce((a, c) => a + c[0] / 4, 0), hy = home.corners.reduce((a, c) => a + c[1] / 4, 0);
+  let best = null; ringM.forEach((a, i) => { const b = ringM[(i + 1) % ringM.length], dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+    const t = Math.max(0, Math.min(1, ((hx - a[0]) * dx + (hy - a[1]) * dy) / L)), p = [a[0] + t * dx, a[1] + t * dy], d = Math.hypot(p[0] - hx, p[1] - hy); if (!best || d < best.d) best = { p, d }; });
+  roadMesh = new THREE.Group(); const mat = new THREE.MeshLambertMaterial({ color: 0xb8ad97 }); const n = Math.max(2, Math.ceil(best.d / 2));
+  for (let i = 0; i < n; i++) { const t = i / n, x = best.p[0] + (hx - best.p[0]) * t, y = best.p[1] + (hy - best.p[1]) * t;
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.12, 3.6), mat); seg.position.set(x, heightAt(x, -y) + 0.08, -y); seg.rotation.y = Math.atan2(hx - best.p[0], -(hy - best.p[1])); seg.receiveShadow = true; roadMesh.add(seg); }
+  world.add(roadMesh);
 }
 function syncPlan() {
   g.plan = { items: plan.map(({ uid, item, corners, slope }) => ({ uid, item, corners, slope })), eval: evaluate(plan, lot()) };
@@ -225,7 +258,7 @@ async function voice(msg, npc) {
 
 // ---------------------------------------------------------------- UI
 let composeQuest = null, inboxTab = 'agencies', headPortrait = null;
-const AGENCY_BG = { permitting: '#2d6a4f', health: '#2c5d7c', ecology: '#1f6f8b', lni: '#a8741a', utility: '#4a4a52', 'bank-cu': '#3d6b4f', 'bank-ridge': '#2f3e5c', usda: '#6b5a2e' };
+const AGENCY_BG = { excavator: '#7a5c2e', 'crew-fast': '#8b6f1f', 'crew-cheap': '#5a4a2e', permitting: '#2d6a4f', health: '#2c5d7c', ecology: '#1f6f8b', lni: '#a8741a', utility: '#4a4a52', 'bank-cu': '#3d6b4f', 'bank-ridge': '#2f3e5c', usda: '#6b5a2e' };
 const specFor = id => portraitSpec(id, NPCS[id].official ? NPCS[id].color : AGENCY_BG[id] || '#7a5c2e');
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { inboxTab = b.dataset.tab; render(); });
 function render() {
@@ -281,12 +314,13 @@ function renderCompose() {
   if ($('cQuest').dataset.npc !== selNpc || $('cQuest').dataset.keep !== keep) {
     $('cQuest').innerHTML = opts; $('cQuest').value = keep; $('cQuest').dataset.npc = selNpc; $('cQuest').dataset.keep = keep; fillDraft();
   } else { const v = $('cQuest').value; $('cQuest').innerHTML = opts; $('cQuest').value = v; }
-  const held = ['site-plan', ...g.docs];
+  const qsel = $('cQuest').value ? questById[$('cQuest').value] : null;
+  const held = qsel ? ['site-plan', ...g.docs].filter(d => qsel.needs.includes(d)) : [];
   const checked = new Set([...document.querySelectorAll('#atts input:checked')].map(i => i.value));
-  if ($('atts').dataset.sig !== held.join() + selNpc) {
+  if ($('atts').dataset.sig !== held.join() + selNpc + ($('cQuest').value || '')) {
     const want = new Set($('cQuest').value ? draft(g, $('cQuest').value).attachments : []);
-    $('atts').innerHTML = '📎 ' + held.map(d => `<label><input type="checkbox" value="${d}" ${want.has(d) || checked.has(d) ? 'checked' : ''}> ${docName(d)}</label>`).join('');
-    $('atts').dataset.sig = held.join() + selNpc;
+    $('atts').innerHTML = !held.length ? '<span class="claude">No attachments needed.</span>' : '📎 ' + held.map(d => `<label><input type="checkbox" value="${d}" ${want.has(d) || checked.has(d) ? 'checked' : ''}> ${docName(d)}</label>`).join('');
+    $('atts').dataset.sig = held.join() + selNpc + ($('cQuest').value || '');
   }
   const real = n.real ? (n.email ? `mailto:${n.email}?subject=${encodeURIComponent(subjectNow())}&body=${encodeURIComponent($('cBody').value)}` : n.url) : null;
   $('realMail').textContent = n.real ? (n.email ? 'Open as real email ↗' : 'Real portal ↗') : n.official ? 'fictional member of a real body' : 'fictional company';
@@ -417,4 +451,4 @@ buildWorld(await (await fetch('/data/parcel.json')).json());
 try { const s = await (await fetch('/api/status')).json(); voiceOn = s.claude; $('sVoice').textContent = s.claude ? '✦ Claude' : 'Scripted'; $('sVoice').title = s.claude ? s.model : 'Add ANTHROPIC_API_KEY to .env'; } catch { $('sVoice').textContent = 'Scripted'; }
 initMap(d => { buildWorld(d); startGame(); toast(`📍 New land: ${d.parcel.acres} acres in ${d.parcel.county} County. Fresh budget, fresh inbox.`); });
 startGame(); introModal();
-window.__shedlife = { mapDebug, openShop, get g() { return g; }, plan, clock: () => clock, placeItem, get ring() { return ringM; }, render };
+window.__shedlife = { mapDebug, openShop, autoplay: () => { const r = autoplay(g); clock.t = SCENARIO.startDate + g.day * DAY; syncPlan(); syncSite(); render(); return r; }, get g() { return g; }, plan, clock: () => clock, placeItem, get ring() { return ringM; }, render };

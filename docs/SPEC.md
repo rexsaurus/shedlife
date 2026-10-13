@@ -2,7 +2,7 @@
 
 Status: draft v0.1, 2026-10-12. Owner: Rex St John. Repo: github.com/rexsaurus/shedlife (private). Incubating as a subdomain of rexstjohn.com.
 
-Companion docs: [README](../README.md) (current build, run instructions), [data-sources.md](data-sources.md) (every source we use and its terms).
+Companion docs: [README](../README.md) (current build, run instructions), [ROADMAP](ROADMAP.md), [CLAUDE.md](../CLAUDE.md) (coding-agent guide and backlog), [data-sources.md](data-sources.md) (every source we use and its terms).
 
 ---
 

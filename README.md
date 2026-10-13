@@ -4,6 +4,12 @@ SimCity for building a real property. A fully isometric Three.js browser game la
 
 ![P0 screenshot](docs/screenshot.png)
 
+## Docs
+- [docs/SPEC.md](docs/SPEC.md): full product spec
+- [docs/ROADMAP.md](docs/ROADMAP.md): milestones P0–P4
+- [CLAUDE.md](CLAUDE.md): guide for coding agents (run/test/build, architecture, conventions, backlog)
+- [docs/data-sources.md](docs/data-sources.md): data sources and their terms
+
 ## P0 (this commit)
 - Vite + Three.js, orthographic isometric camera, wheel zoom
 - **Real parcel**: APN 036174080, vacant land in Montara (unincorporated San Mateo County), from the county's public ArcGIS REST parcel layer
@@ -34,4 +40,4 @@ npm run fetch-parcel -- 036174080   # refresh parcel + elevation from the live A
 - **P3** contractor and vendor hooks (CSLB license lookup, quote requests, vendor links)
 - **P4** real transactions, human-in-the-loop approval for every hire, order or filing
 
-Data sources and their terms: [docs/data-sources.md](docs/data-sources.md). Art is original; no third-party assets.
+Full plan: [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/SPEC.md](docs/SPEC.md). Data sources and their terms: [docs/data-sources.md](docs/data-sources.md). Art is original; no third-party assets.

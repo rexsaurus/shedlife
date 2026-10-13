@@ -68,3 +68,21 @@ Use vendor product pages as links + manually curated specs (dimensions, price, U
 
 ## P0 decision
 Use San Mateo County parcel REST + USGS 3DEP (both public, no key, permissive). Bundle one parcel snapshot (`public/data/parcel.json`, refresh with `npm run fetch-parcel -- <APN>`) so the game runs offline and doesn't hammer county servers.
+
+## Land for sale: options compared (2026-10-12)
+
+| Source | Access method | Cost | Terms / usable today? |
+|---|---|---|---|
+| **RentCast API** — https://developers.rentcast.io/reference/sale-listings | REST `GET /v1/listings/sale?propertyType=Land&latitude&longitude&radius`, `X-Api-Key` header | Free Developer plan (~50 requests/month), paid tiers above that (https://www.rentcast.io/api) | Self-serve key, MLS-derived active listings with price, lot size, lat/lon, MLS #, agent/office. Display in your app is allowed under the API terms (attribution, no resale of raw data). **Chosen: best legit option usable today, but it needs Rex to sign up for a key.** |
+| ATTOM Data API — https://api.developer.attomdata.com/ | REST, API key; property/AVM/tax/foreclosure data (listing data is limited) | Free 30-day trial, then paid contracts (typically $hundreds+/mo) | Legit, strong parcel/tax data; weak on current land listings. Good later for P2 due diligence. |
+| Regrid — https://regrid.com/api | Parcel API + tiles | Paid (self-serve tiers + enterprise); limited free | Parcels and owners, **not for-sale listings**. |
+| LandWatch / Land.com network (CoStar) — https://www.land.com/ | No public API; listing *syndication in* for brokers, no data feed out | Partner agreements only | ToS bans scraping. Not usable. |
+| LoopNet / Crexi | LoopNet (CoStar) no public API; Crexi has no public listings API (partner/broker integrations) | Partner only | Commercial-focused; ToS bans scraping. Not usable today. |
+| Realtor.com / Move | No public listing API; partner programs are for brokers/advertisers (RDC syndication from MLS) | Partner only | Not usable. |
+| RESO Web API / IDX via a broker — https://www.reso.org/reso-web-api/ | MLS feed (MLSListings, bridgeMLS) through a licensed broker's IDX/VOW agreement | MLS + vendor fees (often $50–$500/mo) | Most complete, fully legit; needs a broker sponsor. Best long-term route (P3/P4). |
+| **County tax-defaulted sales** (CA Rev. & Tax. Code §3691) | Official public lists published by each county tax collector (notice + spreadsheet), auctions on Bid4Assets / mytaxsale / GovEase | Free to read; $5,000 deposit to bid (Santa Clara) | Public record. Santa Clara County sale runs **Oct 30–Nov 2, 2026** (https://dtac.santaclaracounty.gov/taxes/public-auction-tax-defaulted-properties, https://www.bid4assets.com/santaclara); San Mateo sells ~August (https://sanmateo.mytaxsale.com). Bid4Assets and the county site block automated access, and mytaxsale's robots.txt disallows `/auction/`, so ShedLife **imports the county's own downloaded list** (`scripts/import-taxsale.mjs`) instead of scraping. |
+| BLM land sales — https://www.blm.gov/programs/lands-and-realty/land-tenure/land-sales | Public notices; no API | Free | Rare and almost never in the Bay Area. |
+| GSA real property — https://realestatesales.gov/ | Public auction pages; no listing API (the GSA Auctions API at api.gsa.gov covers personal property only) | Free | Occasional CA sites; manual import only. |
+| Public tax-sale aggregators (Properant, Tax Sale Resources, taxlien.io) | Web pages, paid subscriptions | Paid | Third-party; use the county source instead. |
+
+Wired in: `server/listings.mjs` (RentCast provider, 4 Bay Area search circles, 6-hour cache to stay inside the free quota) + `data/taxsale-listings.json` (official county lists imported by hand). Selected lots load their boundary from county GIS (San Mateo or Santa Clara, by APN or by the listing's lat/lon) and terrain from USGS 3DEP via `/api/parcel`.

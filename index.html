@@ -9,9 +9,12 @@
  button{border:1px solid #889;background:#fff;border-radius:5px;padding:5px 9px;cursor:pointer}
  button.on{background:#2d6a4f;color:#fff}
  #clock{font-variant-numeric:tabular-nums;min-width:110px;text-align:center;font-weight:600}
+ #land{position:fixed;top:10px;right:10px;width:290px;max-height:70vh;overflow:auto;background:#fffd;border-radius:8px;padding:10px 12px;box-shadow:0 2px 8px #0002}
+ #land h2{font-size:14px;margin:0 0 4px} #land ul{list-style:none;padding:0;margin:6px 0 0} #land li{border-top:1px solid #ddd;padding:6px 0} #land .empty{color:#666}
 </style></head>
 <body>
 <div id="hud"><h1>ShedLife <small>P0</small></h1><div id="info">Loading real parcel…</div></div>
+<div id="land"><h2>Land for sale · Bay Area</h2><small id="lstatus">loading…</small><ul id="listings"></ul></div>
 <div id="bar">
  <button id="tool-place" class="on" title="P">Place shed</button>
  <button id="rotate" title="R">Rotate ⟳</button>

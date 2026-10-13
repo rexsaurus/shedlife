@@ -12,6 +12,13 @@ SimCity for building a real property. A fully isometric Three.js browser game la
 - Place tool for an original low-poly 8×10 shed (snaps to 0.5 m, R to rotate, red when it crosses the lot line)
 - Sim clock: pause, 1×, 10×, 60×, 600× (1× = 1 game minute per second); the sun follows the clock
 
+## Land for sale panel
+Right-hand panel lists Bay Area vacant land from legitimate sources only (see [docs/data-sources.md](docs/data-sources.md)):
+- **RentCast** (MLS-derived active listings, `propertyType=Land`): put `RENTCAST_API_KEY=...` in `.env` (free Developer plan at https://app.rentcast.io/app/api). Calls go through the Vite server so the key never reaches the browser; results are cached 6 h to fit the free quota.
+- **County tax-defaulted sales**: download the county's official list (e.g. Santa Clara's Oct 30–Nov 2, 2026 sale spreadsheet from https://www.bid4assets.com/santaclara), save as CSV, then
+  `node scripts/import-taxsale.mjs list.csv --county santa-clara --sale "Oct 30–Nov 2, 2026" --url https://www.bid4assets.com/santaclara`
+"Load lot" pulls the parcel boundary from county GIS (San Mateo / Santa Clara) and terrain from USGS 3DEP via `/api/parcel` (also usable directly: `/api/parcel?lat=37.2365&lon=-121.9619` or `?apn=036174080&county=san-mateo`).
+
 ## Run
 ```
 npm install

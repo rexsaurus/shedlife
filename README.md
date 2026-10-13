@@ -1,5 +1,7 @@
 # ShedLife
 
+![ShedLife icon](public/icon-512.png)
+
 SimCity for building a real property. A fully isometric Three.js browser game layered on real land, terrain, zoning and contractor data. Pick a real parcel, shape it, drop real sheds / tiny homes / RVs on it, run the clock, and work through the actual permits. The long-term goal: the same moves hire real contractors and order real structures, with human approval on every real-world action.
 
 ![P0 screenshot](docs/screenshot.png)

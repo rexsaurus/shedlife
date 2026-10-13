@@ -9,7 +9,8 @@ import { autoplay } from './autoplay.js';
 import { makeStructure, tint, ghostify } from './meshes.js';
 import { evaluate, footprint } from './rules.js';
 import { SCENARIO, NPCS, QUESTS, questById } from './scenarios/king-county.js';
-import { newGame, send, tick, draft, questLog, nextMailDay, unread, docName, fmt$, summary } from './engine.js';
+import { newGame, send, tick, draft, questLog, nextMailDay, unread, docName, fmt$, summary, openInvoices, payInvoice, negotiateInvoice, amountDue, followUp, threaten } from './engine.js';
+import { FORMS, autofill, measuredWellDistance } from './scenarios/king-county-forms.js';
 
 const $ = id => document.getElementById(id);
 const DAY = 86_400_000;
@@ -24,7 +25,7 @@ const scene = new THREE.Scene(); scene.background = new THREE.Color(0xcfe3ef);
 const cam = new THREE.OrthographicCamera();
 const fitCam = () => { // keep the lot centred in the gap between the inbox (left) and quest log (right)
   const a = innerWidth / innerHeight; Object.assign(cam, { left: -zoom * a, right: zoom * a, top: zoom, bottom: -zoom, near: -2000, far: 2000 });
-  cam.setViewOffset(innerWidth, innerHeight, -((document.body.classList.contains('inbox-closed') ? 10 : 400) - 330) / 2, 0, innerWidth, innerHeight); cam.updateProjectionMatrix();
+  cam.setViewOffset(innerWidth, innerHeight, -((document.body.classList.contains('inbox-closed') ? 10 : 350) - 330) / 2, 0, innerWidth, innerHeight); cam.updateProjectionMatrix();
 };
 cam.position.set(100, 100 * Math.SQRT1_2 * 1.15, 100); cam.lookAt(0, 0, 0);
 scene.add(world);
@@ -93,7 +94,7 @@ let g, clock, plan = [], uid = 0, tool = null, rot = 0, ghost = null, valid = fa
 const lot = () => ({ ring: ringM, zoning: parcel.zoning || 'RA-5' });
 
 function startGame() {
-  g = newGame(SCENARIO); g.parcelId = parcel.apn; g.zoning = parcel.zoning || 'RA-5'; g.county = parcel.county; g.playerName = 'Rex';
+  g = newGame(SCENARIO); g.parcelId = parcel.apn; g.zoning = parcel.zoning || 'RA-5'; g.county = parcel.county; g.acres = parcel.acres; g.playerName = 'Rex';
   g.threads.permitting[0].body = `Welcome. You own ${parcel.acres?.toFixed(1)} acres in ${parcel.jurisdiction || parcel.county + ' County'}${parcel.zoning ? `, zoned ${parcel.zoning}` : ' (zoning not published statewide; we apply RA-5 rural rules)'}.${parcel.county && parcel.county !== 'King' ? `\n\nHeads up: this permit path is modeled on King County. ${parcel.county} County's agencies differ in the real world.` : ''}\n\nTo live there legally you need water, septic, power, a building permit and a final inspection. Start by asking us what can be built, then shop for a home and place it with a well and drainfield on the map.\n\nEvery request is an email. Agencies reply on the clock; use ⏭ to wait for mail. The 🏛️ Officials tab lets you talk to council members and commissioners.\n\n— King County Permitting`;
   clock = new SimClock(SCENARIO.startDate); clock.setSpeed(0);
   plan.splice(0).forEach(p => scene.remove(p.mesh));
@@ -217,7 +218,7 @@ addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R') rotate();
   if (e.key === 'Escape') setTool(null);
   if (e.key === 'x' || e.key === 'X') $('erase').click();
-  if (e.key === ' ') { e.preventDefault(); setSpeed(clock.speed ? 0 : 1440); }
+  if (e.key === ' ') { e.preventDefault(); setSpeed(clock.speed ? 0 : 120); }
 });
 $('rotate').onclick = rotate;
 $('erase').onclick = () => { setTool(null); erase = !erase; $('erase').classList.toggle('on', erase); };
@@ -228,17 +229,18 @@ addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); fi
 function setSpeed(s) { clock.setSpeed(s); document.querySelectorAll('[data-speed]').forEach(o => o.classList.toggle('on', Number(o.dataset.speed) === s)); }
 document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => setSpeed(Number(b.dataset.speed)));
 const gameDay = () => Math.floor((clock.t - SCENARIO.startDate) / DAY);
-$('skip').onclick = () => {
+function skipToMail() {
   const nd = nextMailDay(g); if (!Number.isFinite(nd)) return toast('No replies pending. Send someone an email!');
-  clock.t = Math.max(clock.t, SCENARIO.startDate + nd * DAY); advance();
-};
+  setSpeed(10080); // fast-forward; the clock pauses itself when mail arrives
+}
+$('skip').onclick = skipToMail;
 function advance() {
   const d = gameDay(); if (d <= g.day && !g.outcome) return;
   const got = tick(g, d).filter(m => m.from !== 'me');
   if (got.length) {
     setSpeed(0);
     const m = got[got.length - 1]; const n = NPCS[m.from];
-    toast(`${n.avatar} ${n.name}: ${m.subject}${got.length > 1 ? ` (+${got.length - 1} more)` : ''}`, () => { selNpc = m.from; render(); });
+    toast(`${n.avatar} ${n.name}: ${m.subject}${got.length > 1 ? ` (+${got.length - 1} more)` : ''}`, () => { selNpc = m.from; openConvo(); render(); });
     syncPlan(); syncSite();
   }
   if (g.outcome) { setSpeed(0); endModal(); }
@@ -267,15 +269,17 @@ function render() {
   $('sBudget').textContent = fmt$(g.budget); $('sBudget').style.color = g.budget < 20000 ? 'var(--red)' : '';
   const core = QUESTS.filter(q => !q.loan && !q.crew && (!q.when || q.when(g))); $('sProgress').textContent = `${core.filter(q => g.quests[q.id] === 'done').length}/${core.length}`;
   $('sLoan').textContent = g.loan ? `${fmt$(g.loan.amount)} @ ${(g.loan.rate * 100).toFixed(2)}%` : 'none'; $('sLoan').title = g.loan ? `Interest paid so far: ${fmt$(g.loan.interest)}` : 'Talk to a bank in the Agencies tab';
-  $('clock').textContent = `Day ${gameDay()}`;
+  { const d = new Date(clock.t), h = d.getUTCHours(); $('clock').textContent = `Day ${gameDay()} · ${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'} ${h >= 6 && h < 18 ? '☀️' : '🌙'}`; }
   const u = unread(g); $('unread').innerHTML = u ? `<span class="badge b-answer">${u}</span>` : '';
+  const ob = openInvoices(g), od = ob.filter(i => g.day > i.due).length; $('billCount').textContent = ob.length; $('billCount').style.display = ob.length ? 'inline-block' : 'none'; $('billCount').style.background = od ? 'var(--red)' : '';
   $('tabCount').textContent = u; $('tabCount').style.display = u ? 'inline-block' : 'none';
   // threads (agencies & contractors | officials grouped by body)
   const last = id => (g.threads[id] || []).filter(m => m.delivered).at(-1);
+  const activity = id => { const t = g.threads[id] || []; return t.length ? 1e6 + Math.max(...t.map(m => m.id)) : 0; };
   const row = id => {
     const n = NPCS[id], l = last(id), has = (g.threads[id] || []).some(m => m.delivered && !m.read && m.from !== 'me');
     const waiting = (g.threads[id] || []).some(m => !m.delivered);
-    return `<div class="th ${id === selNpc ? 'sel' : ''} ${id === 'foreman' ? 'pin' : ''}" data-npc="${id}"><canvas class="pt" data-pt="${id}"></canvas><div><div class="nm">${n.official ? n.shortName : n.name}${n.official ? ` <span class="tag">${n.seat}</span>` : n.real ? '' : '<span class="tag">fictional</span>'}${waiting ? ' <span class="tag">⏳</span>' : ''}</div><div class="sub">${l ? l.subject : n.official ? (n.priorities.length ? 'Cares about ' + n.priorities.join(', ') : 'Hears permit appeals') : n.org}</div></div>${has ? '<span class="dot"></span>' : ''}</div>`;
+    return `<div class="th ${id === selNpc ? 'sel' : ''} ${id === 'foreman' ? 'pin' : ''}" data-npc="${id}"><canvas class="pt" data-pt="${id}"></canvas><div><div class="nm">${n.official ? n.shortName : n.name}${n.official ? ` <span class="tag">${n.seat}</span>` : n.real ? '' : '<span class="tag">fictional</span>'}${waiting ? ' <span title="Waiting for their reply" style="font-size:13px">🕒</span>' : ''}</div><div class="sub">${l ? l.subject : n.official ? (n.priorities.length ? 'Cares about ' + n.priorities.join(', ') : 'Hears permit appeals') : n.org}</div></div>${has ? '<span class="dot red" title="New reply"></span>' : ''}</div>`;
   };
   document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === inboxTab));
   if (inboxTab === 'agencies') {
@@ -283,10 +287,10 @@ function render() {
     $('threads').innerHTML = order.map(row).join('');
   } else {
     $('threads').innerHTML = BODIES.map(b => `<div class="bodyhead" style="background:${b.color}" title="${esc(b.role)}">${b.name}${b.relevant ? ' · your parcel' : ''}</div>` +
-      Object.keys(NPCS).filter(id => NPCS[id].body === b.id).map(row).join('')).join('');
+      Object.keys(NPCS).filter(id => NPCS[id].body === b.id).sort((a, c) => activity(c) - activity(a)).map(row).join('')).join('');
   }
   document.querySelectorAll('canvas[data-pt]').forEach(c => mountPortrait(c, specFor(c.dataset.pt)));
-  document.querySelectorAll('.th').forEach(el => el.onclick = () => { selNpc = el.dataset.npc; composeQuest = null; render(); });
+  document.querySelectorAll('.th').forEach(el => el.onclick = () => { selNpc = el.dataset.npc; composeQuest = null; openConvo(); render(); });
   // thread
   const n = NPCS[selNpc], msgs = g.threads[selNpc] || [];
   msgs.forEach(m => { if (m.delivered) m.read = true; });
@@ -298,16 +302,67 @@ function render() {
   $('thread').innerHTML = msgs.map(m => m.from === 'me'
       ? `<div class="msg me"><div class="hd"><b>You</b><span>Day ${m.day}</span></div>${n.official ? '' : `<b>${esc(m.subject)}</b>\n`}${esc(m.body)}${m.attachments?.length ? `<div class="att">📎 ${m.attachments.map(docName).join(', ')}</div>` : ''}</div>`
       : m.delivered
-        ? `<div class="msg"><div class="hd"><b>${n.official ? n.shortName : n.name}${label(m.verdict?.kind) ? `<span class="badge b-${m.verdict?.kind}">${label(m.verdict?.kind)}</span>` : ''}</b><span>Day ${m.deliverDay}${m.voiced ? ' · ✦ Claude' : ''}</span></div>${n.official ? '' : `<b>${esc(m.subject)}</b>\n`}${esc(m.body)}</div>`
+        ? `<div class="msg ${m.invoice ? 'inv' : ''}"><div class="hd"><b>${n.official ? n.shortName : n.name}${label(m.verdict?.kind) ? `<span class="badge b-${m.verdict?.kind}">${label(m.verdict?.kind)}</span>` : ''}</b><span>Day ${m.deliverDay}${m.voiced ? ' · ✦ Claude' : ''}</span></div>${n.official ? '' : `<b>${esc(m.subject)}</b>\n`}${esc(m.body)}${m.invoice ? invoiceActions(m.invoice) : ''}</div>`
         : `<div class="msg pending">⏳ Waiting for a reply from ${n.name}… (expected around day ${m.deliverDay})</div>`).join('') || `<div class="claude" style="padding:8px">${n.official ? 'Say hello. Officials write the rules, but can\'t decide your permit.' : 'No messages yet.'}</div>`;
   $('thread').scrollTop = 1e9;
+  bindBillButtons($('thread'));
   renderCompose(); renderQuests();
 }
-const label = k => ({ accepted: 'APPROVED', 'needs-info': 'NEEDS INFO', 'too-early': 'NOT YET', corrections: 'CORRECTIONS', 'cant-pay': 'CAN’T PAY', pending: 'IN REVIEW', duplicate: 'DONE', answer: 'ANSWER', welcome: 'WELCOME' }[k] || '');
+function invoiceActions(no) {
+  const inv = g.invoices.find(i => i.no === no); if (!inv) return '';
+  if (inv.status === 'paid') return `<div class="acts"><span class="badge b-accepted">PAID ${fmt$(inv.paid)}</span></div>`;
+  const due = amountDue(g, inv);
+  return `<div class="acts"><button class="primary" data-pay="${no}">💵 Pay ${fmt$(due)}</button>${inv.negotiated ? '' : `<button data-neg="${no}">🤝 Negotiate</button>`}<span class="claude">${g.day > inv.due ? '<b style="color:var(--red)">OVERDUE</b>' : `due day ${inv.due}`}${inv.discount && g.day <= inv.discountUntil ? ` · ${Math.round(inv.discount * 100)}% off until day ${inv.discountUntil}` : ''}${inv.lien ? ' · LIEN FILED' : ''}</span></div>`;
+}
+function bindBillButtons(root) {
+  root.querySelectorAll('[data-pay]').forEach(b => b.onclick = () => { const r = payInvoice(g, +b.dataset.pay); toast(r.ok ? `💵 Paid ${fmt$(r.amount)}` : r.error); render(); if ($('modal').style.display === 'flex' && $('modalCard').dataset.kind === 'bills') billsModal(); });
+  root.querySelectorAll('[data-neg]').forEach(b => b.onclick = () => { const r = negotiateInvoice(g, +b.dataset.neg); if (r.ok) { voice(r.reply, r.reply.from); toast('🤝 Asked for better terms. Reply in ~2 days.'); } else toast(r.error); render(); if ($('modalCard').dataset.kind === 'bills') billsModal(); });
+}
+function billsModal() {
+  const open = openInvoices(g), paid = (g.invoices || []).filter(i => i.status === 'paid');
+  const row = i => `<tr><td>#${i.no}</td><td>${esc(NPCS[i.npc].name.split(' —')[0])}<br><span class="claude">${esc(i.title)}</span></td><td>${fmt$(i.amount)}${i.lateFees ? `<br><span class="claude">incl. ${fmt$(i.lateFees)} late fees</span>` : ''}</td><td class="${g.day > i.due ? 'od' : ''}">day ${i.due}${g.day > i.due ? ' · overdue' : ''}${i.lien ? ' · LIEN' : ''}</td><td>${invoiceActions(i.no)}</td></tr>`;
+  modal(`<div style="display:flex;justify-content:space-between;align-items:center"><h1 style="margin:0">💵 Bills</h1><button id="billsClose">✕</button></div>
+  <p class="claude">Contractors, vendors, insurers and the utility invoice you after the work, net 30 (deposits due on receipt). Negotiate once per bill. Overdue: 1.5% per month, the contractor stops work, and after 30 days they file a lien (RCW 60.04) that blocks your loan. Government fees are paid when you submit the form.</p>
+  <p><b>Cash ${fmt$(g.budget)}</b> · open ${open.length} totaling <b>${fmt$(open.reduce((a, i) => a + amountDue(g, i), 0))}</b></p>
+  ${open.length ? `<table class="bills"><tr><th></th><th>From</th><th>Amount</th><th>Due</th><th></th></tr>${open.map(row).join('')}</table>` : '<p>No open bills. 🎉</p>'}
+  ${paid.length ? `<details style="margin-top:10px"><summary>Paid (${paid.length}) · ${fmt$(paid.reduce((a, i) => a + i.paid, 0))}</summary><table class="bills">${paid.map(i => `<tr><td>#${i.no}</td><td>${esc(NPCS[i.npc].name.split(' —')[0])} · ${esc(i.title)}</td><td>${fmt$(i.paid)}</td><td>day ${i.paidDay}</td></tr>`).join('')}</table></details>` : ''}`);
+  $('modalCard').classList.add('wide'); $('modalCard').dataset.kind = 'bills';
+  $('billsClose').onclick = () => { $('modal').style.display = 'none'; $('modalCard').classList.remove('wide'); $('modalCard').dataset.kind = ''; };
+  bindBillButtons($('modalCard'));
+}
+const label = k => ({ invoice: 'INVOICE', receipt: 'PAID', negotiated: 'TERMS', lien: 'LIEN', 'form-errors': 'FORM ERRORS', 'on-hold': 'ON HOLD', briefing: 'BRIEFING', accepted: 'APPROVED', 'needs-info': 'NEEDS INFO', 'too-early': 'NOT YET', corrections: 'CORRECTIONS', 'cant-pay': 'CAN’T PAY', pending: 'IN REVIEW', duplicate: 'DONE', answer: 'ANSWER', welcome: 'WELCOME' }[k] || '');
 const linkify = t => esc(t).replace(/\((https?:[^)\s]+)\)/g, (m, u) => `(<a href="${u}" target="_blank" rel="noopener">source</a>)`);
 const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+let composeOverride = null; // npc id for which the player chose "write another message"
+const NEEDY = ['needs-info', 'form-errors', 'corrections'];
+function renderComposeState() {
+  const t = g.threads[selNpc] || [], n = NPCS[selNpc];
+  const waiting = t.filter(m => !m.delivered && m.from !== 'me');
+  const lastReply = [...t].reverse().find(m => m.from !== 'me' && m.delivered);
+  const need = lastReply && NEEDY.includes(lastReply.verdict?.kind) && g.quests[lastReply.verdict.quest] === 'open' && !waiting.length ? lastReply : null;
+  const show = (waiting.length || need) && composeOverride !== selNpc;
+  $('cFields').style.display = show ? 'none' : '';
+  if (!show) { $('cState').innerHTML = composeOverride === selNpc && (waiting.length || need) ? '<div class="claude" style="margin-top:4px"><a href="#" id="backState">← back to status</a></div>' : ''; const b = $('backState'); if (b) b.onclick = e => { e.preventDefault(); composeOverride = null; render(); }; return; }
+  const name = n.official ? n.shortName : n.name.split(' —')[0];
+  if (waiting.length) {
+    const day = Math.min(...waiting.map(m => m.deliverDay)), poked = waiting.every(m => m.poked);
+    $('cState').innerHTML = `<div class="box">⏳ <b>Waiting for a response</b> from ${esc(name)}${waiting[0].verdict?.title ? ` about “${esc(waiting[0].verdict.title)}”` : ''}.<br><span class="claude">Expected around day ${day} (today is day ${g.day}).${poked ? ' You already followed up.' : ''}</span>
+      <div class="row"><button id="poke" ${poked ? 'disabled' : ''}>🔔 Follow up</button><button id="skipTo">⏩ Wait for it</button>${n.official ? '' : '<button id="sue" title="Attorney demand letter: $750">⚖️ Threaten legal action ($750)</button>'}<button id="another">✉ Write another message</button></div></div>`;
+    $('poke').onclick = () => { const r = followUp(g, selNpc); toast(r.ok ? (r.sped ? `🔔 Followed up. Now expected around day ${r.day}.` : 'Followed up again — no faster this time.') : r.error); render(); };
+    $('skipTo').onclick = () => skipToMail();
+    if ($('sue')) $('sue').onclick = () => { const r = threaten(g, selNpc); if (!r.ok) return toast(r.error); voice(r.reply, selNpc); toast(r.outcome === 'backfire' ? '⚖️ That backfired — you owe them money.' : r.outcome === 'gov' ? '⚖️ Sent. Agencies don\'t speed up for threats.' : r.outcome === 'sped' ? '⚖️ Demand letter sent. They\'ll hurry — and stop giving you discounts.' : '⚖️ Sent.'); toast.h2 = setTimeout(() => toast(`Attorney letter: −${fmt$(r.fee)}`), 2600); render(); };
+  } else {
+    const v = need.verdict, what = v.kind === 'form-errors' ? v.errors : v.kind === 'corrections' ? v.violations.map(x => x.msg) : v.missing;
+    $('cState').innerHTML = `<div class="box need">📮 <b>${esc(name)} needs more from you</b> for “${esc(v.title)}”:<ul style="margin:4px 0;padding-left:18px">${what.slice(0, 6).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+      ${v.kind === 'corrections' ? '<span class="claude">Fix the site plan on the map first (red structures), then resubmit.</span>' : ''}
+      <div class="row"><button class="primary" id="attachFix">📎 ${v.kind === 'form-errors' ? 'Fix the form' : v.kind === 'corrections' ? 'Resubmit site plan' : 'Attach details / documents'}</button><button id="another">✉ Write another message</button></div></div>`;
+    $('attachFix').onclick = () => { composeOverride = selNpc; composeQuest = v.quest; $('cQuest').dataset.keep = '#'; $('atts').dataset.sig = ''; render(); };
+  }
+  $('another').onclick = () => { composeOverride = selNpc; composeQuest = ''; $('cQuest').dataset.keep = '#'; render(); };
+}
 function renderCompose() {
+  renderComposeState();
   const n = NPCS[selNpc], qs = QUESTS.filter(q => q.npc === selNpc);
   $('cTo').textContent = `To: ${n.official ? n.name : n.avatar + ' ' + n.name}`;
   const opts = qs.map(q => `<option value="${q.id}">${{ done: '✅', pending: '⏳', open: '•' }[g.quests[q.id]]} ${q.title}</option>`).join('') + `<option value="">${selNpc === 'foreman' ? '📋 Brief me: where do things stand?' : n.official ? '💬 Talk' : '💬 Ask a question'}</option>`;
@@ -330,8 +385,22 @@ function renderCompose() {
   $('send').disabled = !!g.outcome;
 }
 const subjectNow = () => $('cQuest').value ? `${questById[$('cQuest').value].title} — Parcel ${g.parcelId}` : `Question — Parcel ${g.parcelId}`;
+function renderForm(qid) {
+  const F = FORMS[qid], n = NPCS[selNpc];
+  if (!F || !n.gov) { $('cForm').style.display = 'none'; $('cForm').innerHTML = ''; $('cBody').style.display = ''; return; }
+  const opts = f => (typeof f.options === 'function' ? f.options(g) : f.options);
+  $('cForm').innerHTML = `<div class="fh"><span>📝 ${F.name}</span><button id="autofill" title="Fill from the numbers in your emails">✍ Autofill from my records</button></div>` + F.fields.map(f => {
+    const input = f.type === 'select' ? `<select data-f="${f.id}"><option value="">— choose —</option>${opts(f).map(o => `<option>${esc(o)}</option>`).join('')}</select>`
+      : f.type === 'check' ? `<input type="checkbox" data-f="${f.id}">` : `<input type="${f.type === 'number' ? 'number' : 'text'}" data-f="${f.id}">`;
+    const extra = f.id === 'dist' ? ` · your plan measures ${measuredWellDistance(g) ?? '—'} ft` : '';
+    return `<label>${esc(f.label)} ${f.type === 'check' ? input : ''}</label>${f.type === 'check' ? '' : input}${f.hint || extra ? `<div class="hint">${esc((f.hint || '') + extra)}</div>` : ''}`;
+  }).join('');
+  $('cForm').style.display = 'block'; $('cBody').style.display = 'none';
+  $('autofill').onclick = () => { const v = autofill(g, qid); $('cForm').querySelectorAll('[data-f]').forEach(el => { const x = v[el.dataset.f]; if (el.type === 'checkbox') el.checked = !!x; else el.value = x ?? ''; }); };
+}
+const formValues = () => Object.fromEntries([...$('cForm').querySelectorAll('[data-f]')].map(el => [el.dataset.f, el.type === 'checkbox' ? el.checked : el.type === 'number' ? (el.value === '' ? '' : Number(el.value)) : el.value]));
 function fillDraft() {
-  const q = $('cQuest').value;
+  const q = $('cQuest').value; renderForm(q);
   if (q) { const d = draft(g, q); $('cBody').value = d.body; $('cHint').innerHTML = linkify(questById[q].cite);
     $('atts').dataset.sig = ''; }
   else if (selNpc === 'foreman') { $('cBody').value = 'Dale, where do things stand and what should I do next?'; $('cHint').textContent = 'Your foreman answers right away with the current task list, what you are waiting on, and risks.'; }
@@ -342,9 +411,10 @@ $('cQuest').onchange = () => { composeQuest = $('cQuest').value; $('cQuest').dat
 $('send').onclick = () => {
   const questId = $('cQuest').value || null;
   const attachments = [...document.querySelectorAll('#atts input:checked')].map(i => i.value);
-  const r = send(g, { npc: selNpc, questId, body: $('cBody').value, subject: subjectNow(), attachments });
+  const isForm = $('cForm').style.display === 'block', form = isForm ? formValues() : null;
+  const r = send(g, { npc: selNpc, questId, body: isForm ? `Submitted: ${FORMS[questId].name}\n` + Object.entries(form).map(([k, v]) => `  ${FORMS[questId].fields.find(f => f.id === k).label}: ${v === true ? '✓' : v === false ? '✗' : v}`).join('\n') : $('cBody').value, subject: subjectNow(), attachments, form });
   voice(r.reply, selNpc);
-  composeQuest = null; $('cQuest').dataset.keep = '#'; $('atts').dataset.sig = '';
+  composeQuest = null; composeOverride = null; $('cQuest').dataset.keep = '#'; $('atts').dataset.sig = '';
   if (NPCS[selNpc].official || selNpc === 'foreman') { if (!voiceOn) talk(headPortrait, 2500); else toast(`${NPCS[selNpc].shortName || 'Dale'} is thinking…`); }
   else toast(`✉ Sent to ${NPCS[selNpc].name}. Reply expected around day ${r.reply.deliverDay}. Press ⏭ or run the clock.`);
   render();
@@ -388,7 +458,7 @@ function renderQuests() {
     fold('optional', '➕ Optional moves', groups.optional, 'optional', 'negotiate, points, land line') +
     fold('done', '✅ Done', groups.done, 'done');
   document.querySelectorAll('[data-fold]').forEach(d => d.ontoggle = () => { openGroups[d.dataset.fold] = d.open; });
-  document.querySelectorAll('.q').forEach(el => el.onclick = () => { const q = questById[el.dataset.q]; selNpc = q.npc; composeQuest = q.id; $('cQuest').dataset.keep = '#'; render(); });
+  document.querySelectorAll('.q').forEach(el => el.onclick = () => { const q = questById[el.dataset.q]; selNpc = q.npc; composeQuest = q.id; composeOverride = q.npc; openConvo(); inboxTab = 'agencies'; $('cQuest').dataset.keep = '#'; render(); });
   const vs = g.plan.eval.violations;
   $('viol').innerHTML = !plan.length ? '<li style="color:var(--mute)">Place a home, a well and a septic drainfield on the lot.</li>' : vs.length ? vs.map(v => `<li title="${esc(v.ref)}">${esc(v.msg)}</li>`).join('') : '<li style="color:var(--green)">✓ Site plan meets the rules we check</li>';
   $('docs').innerHTML = g.docs.length ? g.docs.map(d => `<li>${docName(d)}</li>`).join('') : '<li style="color:var(--mute)">None yet</li>';
@@ -429,6 +499,7 @@ function summaryModal() {
    <div><h2>Do next (${S.ready.length})</h2><ul>${li(S.ready)}</ul>
         <h2>Waiting on (${S.pending.length})</h2><ul>${li(S.pending.map(p => p.title + (p.day != null ? ` — reply ~day ${p.day}` : '')))}</ul></div>
    <div><h2>Blocked</h2><ul>${li(S.blocked.map(b => `${b.title} — needs ${b.waitingOn.join(', ')}`))}</ul>
+        <h2>Bills (${S.bills.length}) · ${fmt$(S.billsTotal)}</h2><ul>${li(S.bills.map(b => `#${b.no} ${b.from} — ${fmt$(b.amount)}, due day ${b.due}${b.overdue ? ' (OVERDUE)' : ''}${b.lien ? ' · LIEN' : ''}`))}</ul>
         <h2>Documents (${S.docs.length})</h2><ul>${li(S.docs)}</ul>
         <h2>Site</h2><ul>${li(S.site ? [S.site.stream ? 'Seasonal stream on the parcel (buffer + HPA)' : 'No streams or wetlands mapped', `~${S.site.trees} trees in the build area`] : ['Unknown until the Critical Area Designation comes back'])}</ul></div>
   </div>
@@ -436,12 +507,17 @@ function summaryModal() {
   $('modalCard').classList.add('wide');
   const close = () => { $('modal').style.display = 'none'; $('modalCard').classList.remove('wide'); };
   $('sumClose').onclick = $('sumOk').onclick = close;
-  $('sumForeman').onclick = () => { close(); openInbox(); inboxTab = 'agencies'; selNpc = 'foreman'; composeQuest = null; render(); $('send').click(); };
+  $('sumForeman').onclick = () => { close(); inboxTab = 'agencies'; selNpc = 'foreman'; composeQuest = null; openConvo(); render(); $('send').click(); };
 }
+function openConvo() { $('convo').classList.add('open'); $('convoBack').classList.add('open'); }
+function closeConvo() { $('convo').classList.remove('open'); $('convoBack').classList.remove('open'); }
+$('convoClose').onclick = closeConvo; $('convoBack').onclick = closeConvo;
+addEventListener('keydown', e => { if (e.key === 'Escape' && $('convo').classList.contains('open')) closeConvo(); });
 const openInbox = () => { document.body.classList.remove('inbox-closed'); fitCam(); };
 $('inboxClose').onclick = () => { document.body.classList.add('inbox-closed'); fitCam(); };
 $('inboxTab').onclick = openInbox;
 $('topSummary').onclick = () => summaryModal();
+$('topBills').onclick = () => billsModal();
 function endModal() {
   const o = g.outcome;
   modal(o.won ? `<h1>🎉 You live here now.</h1><p>Final inspection passed on <b>day ${o.day}</b>.</p><p>Spent ${fmt$(g.spent)} · ${fmt$(g.budget)} left · ${Object.values(g.threads).flat().filter(m => m.from === 'me').length} emails sent.</p>${o.mortgage ? `<p>Your construction loan converted to a 30-year mortgage: <b>${fmt$(o.mortgage)}/month</b> (${fmt$(g.loan.interest)} of interest paid during the build).</p>` : ''}<p class="claude">In real life this took ${o.day} days of waiting. You did it in minutes. Now you know the path.</p><p style="text-align:right"><button class="primary" id="again">Play again</button></p>`
@@ -498,14 +574,28 @@ const isHome = i => i.kind === 'dwelling';
 $('shopClose').onclick = () => { $('shop').style.display = 'none'; };
 
 // ---------------------------------------------------------------- loop
+// Day/night: sun arc, sky color (night → dawn → day → dusk), light levels, glowing windows after dark.
+const SKY = { night: new THREE.Color(0x0b1830), dawn: new THREE.Color(0xf0b48c), day: new THREE.Color(0xcfe3ef) };
+const hemi = scene.children.find(o => o.isHemisphereLight); let wasNight = null;
+function dayNight(hour) {
+  const t = (hour - 6) / 12, a = t * Math.PI, el = Math.sin(a); // elevation −1..1
+  sun.position.set(Math.cos(a) * 70, Math.max(el, -0.2) * 90 + 10, 25);
+  const day = Math.max(0, Math.min(1, (el + 0.1) / 0.45)), twilight = Math.max(0, 1 - Math.abs(el) / 0.3);
+  const sky = SKY.night.clone().lerp(SKY.day, day); sky.lerp(SKY.dawn, twilight * 0.55 * (el > -0.25 ? 1 : 0));
+  scene.background.copy(sky);
+  sun.intensity = 0.15 + 1.6 * day; sun.color.setHSL(0.09, 0.6 * twilight, 0.6 + 0.4 * day);
+  if (hemi) hemi.intensity = 0.35 + 1.25 * day;
+  const night = day < 0.25;
+  if (night !== wasNight) { wasNight = night; for (const p of plan) p.mesh.traverse(m => { if (m.isMesh && m.material.color?.getHex() === 0x9fc6dd) { if (!m.userData.own) { m.material = m.material.clone(); m.userData.own = true; } m.material.emissive?.setHex(night ? 0xffc46b : 0x000000); } }); }
+}
 let last = performance.now();
 renderer.setAnimationLoop(now => {
   if (clock) {
     clock.tick((now - last) / 1000);
     if (g && !g.outcome) advance();
     const hour = new Date(clock.t).getUTCHours() + new Date(clock.t).getUTCMinutes() / 60;
-    const a = (hour - 6) / 12 * Math.PI; sun.position.set(Math.cos(a) * 60, Math.max(Math.sin(a), 0.15) * 80, 20);
-    sun.intensity = clock.speed >= 1440 ? 1.6 : hour > 6 && hour < 18 ? 1.6 : 0.3;
+    dayNight(clock.speed >= 10080 ? 13 : hour);
+    { const d = new Date(clock.t), h = d.getUTCHours(); $('clock').textContent = `Day ${gameDay()} · ${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'} ${h >= 6 && h < 18 ? '☀️' : '🌙'}`; }
   }
   last = now; renderer.render(scene, cam);
 });
@@ -514,4 +604,4 @@ buildWorld(await (await fetch('/data/parcel.json')).json());
 try { const s = await (await fetch('/api/status')).json(); voiceOn = s.claude; $('sVoice').textContent = s.claude ? '✦ Claude' : 'Scripted'; $('sVoice').title = s.claude ? s.model : 'Add ANTHROPIC_API_KEY to .env'; } catch { $('sVoice').textContent = 'Scripted'; }
 initMap(d => { buildWorld(d); startGame(); toast(`📍 New land: ${d.parcel.acres} acres in ${d.parcel.county} County. Fresh budget, fresh inbox.`); });
 startGame(); introModal();
-window.__shedlife = { mapDebug, openShop, autoplay: () => { const r = autoplay(g); clock.t = SCENARIO.startDate + g.day * DAY; syncPlan(); syncSite(); render(); return r; }, get g() { return g; }, plan, clock: () => clock, placeItem, get ring() { return ringM; }, render };
+window.__shedlife = { openConvo: () => openConvo(), closeConvo: () => closeConvo(), mapDebug, openShop, skip: () => { const nd = nextMailDay(g); if (Number.isFinite(nd)) { clock.t = Math.max(clock.t, SCENARIO.startDate + nd * DAY); advance(); } }, setHour: h => { clock.setSpeed(0); const d = new Date(clock.t); d.setUTCHours(h, 0); clock.t = d.getTime(); }, autoplay: () => { const r = autoplay(g); clock.t = SCENARIO.startDate + g.day * DAY; syncPlan(); syncSite(); render(); return r; }, get g() { return g; }, plan, clock: () => clock, placeItem, get ring() { return ringM; }, render };

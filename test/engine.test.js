@@ -30,17 +30,18 @@ test('emails out of order are bounced, no fee', () => {
   const g = withPlan(newGame(SCENARIO), goodPlan());
   const r = send(g, { npc: 'permitting', questId: 'permit', attachments: ['site-plan'] });
   assert.equal(r.verdict.kind, 'too-early'); assert.equal(g.budget, SCENARIO.budget);
-  const r2 = send(g, { npc: 'permitting', questId: 'zoning' }); assert.equal(r2.verdict.kind, 'accepted');
+  const r2 = send(g, { npc: 'permitting', questId: 'zoning', form: { parcel: g.parcelId } }); assert.equal(r2.verdict.kind, 'accepted');
   const r3 = send(g, { npc: 'permitting', questId: 'cad', attachments: [] });
   assert.equal(r3.verdict.kind, 'too-early'); // zoning not delivered yet
   tick(g, 3); assert.equal(g.quests.zoning, 'done');
   const r4 = send(g, { npc: 'permitting', questId: 'cad', attachments: [] });
   assert.equal(r4.verdict.kind, 'needs-info'); assert.match(r4.reply.body, /Site plan/);
 });
-test('site plan violations come back as corrections', () => {
+test('site plan violations come back as corrections', async () => {
   const g = withPlan(newGame(SCENARIO), [place(1, 'tiny', 3, 50)]);
-  send(g, { npc: 'permitting', questId: 'zoning' }); advance(g);
-  const r = send(g, { npc: 'permitting', questId: 'cad', attachments: ['site-plan'] });
+  send(g, { npc: 'permitting', questId: 'zoning', form: { parcel: g.parcelId } }); advance(g);
+  const { autofill } = await import('../src/scenarios/king-county-forms.js');
+  const r = send(g, { npc: 'permitting', questId: 'cad', attachments: ['site-plan'], form: autofill(g, 'cad') });
   assert.equal(r.verdict.kind, 'corrections'); assert.ok(r.verdict.violations.length);
 });
 test('loan math: prequal, LTV cap, payment', async () => {
@@ -64,4 +65,24 @@ for (const stream of [false, true]) test(`full playthrough reaches occupancy (st
   assert.ok(g.docs.includes('homeowners') && g.docs.includes('site-cleared') && g.docs.includes('driveway')); assert.ok(g.crew, 'a crew was hired');
   assert.equal(g.quests.hpa === 'done', stream);
   assert.ok(g.rates['bank-ridge'] < 0.0775, 'negotiation lowered a rate');
+});
+
+test('invoices: contractors bill after the work, negotiate once, late fees, liens block the loan', async () => {
+  const E = await import('../src/engine.js');
+  const g = withPlan(newGame(SCENARIO), goodPlan()); g.site = { stream: false, trees: 50 };
+  const r = send(g, { npc: 'designer', questId: 'designer' }); assert.equal(r.verdict.kind, 'accepted'); assert.equal(g.budget, SCENARIO.budget, 'no charge until invoiced');
+  tick(g, 5); const inv = E.openInvoices(g)[0]; assert.equal(inv.amount, 4500); assert.equal(inv.due, 35);
+  assert.ok(E.negotiateInvoice(g, inv.no).ok); assert.equal(E.negotiateInvoice(g, inv.no).ok, false, 'only once');
+  tick(g, 7); assert.equal(E.amountDue(g, inv), 4275, '5% prompt-pay discount');
+  E.payInvoice(g, inv.no); assert.equal(g.budget, SCENARIO.budget - 4275);
+  send(g, { npc: 'surveyor', questId: 'survey' }); // needs zoning first → too-early, so book zoning + survey
+  send(g, { npc: 'permitting', questId: 'zoning', form: { parcel: g.parcelId } }); tick(g, 10);
+  send(g, { npc: 'surveyor', questId: 'survey' }); tick(g, 30); const s2 = E.openInvoices(g)[0];
+  tick(g, s2.due + 31); assert.ok(s2.lien, 'lien after 30 days overdue'); assert.ok(s2.lateFees > 0);
+  const on = send(g, { npc: 'surveyor', questId: 'survey' }); assert.ok(['on-hold', 'duplicate'].includes(on.verdict.kind));
+});
+test('forms: wrong parcel number is rejected with a reason', () => {
+  const g = withPlan(newGame(SCENARIO), goodPlan()); g.parcelId = '8847400030';
+  const r = send(g, { npc: 'permitting', questId: 'zoning', form: { parcel: '123' } });
+  assert.equal(r.verdict.kind, 'form-errors'); assert.match(r.verdict.errors[0], /doesn't match/);
 });

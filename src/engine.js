@@ -1,6 +1,7 @@
 // ShedLife inbox engine. Pure game state: every move is an email to an NPC; replies arrive on the clock.
 // The engine decides every outcome deterministically. Claude (server/npc.mjs) only writes the words.
-import { NPCS, QUESTS, DOCS, questById, homePermitFee, LENDERS, SITE_BUDGET, RATE_FLOOR, crewQuote, CREWS, LAND_LINE } from './scenarios/king-county.js';
+import { NPCS, QUESTS, DOCS, questById, homePermitFee, LENDERS, SITE_BUDGET, RATE_FLOOR, crewQuote, CREWS, LAND_LINE, BILL_TERMS } from './scenarios/king-county.js';
+import { FORMS, checkForm, issueRef, REF_PREFIX } from './scenarios/king-county-forms.js';
 import { rng } from './officials.js';
 import { scriptedReply } from './letters.js';
 
@@ -8,7 +9,7 @@ export function newGame(scenario) {
   const quests = Object.fromEntries(QUESTS.map(q => [q.id, 'open']));
   const g = { scenario, day: 0, budget: scenario.budget, spent: 0, docs: [], quests, threads: {}, seq: 0, outcome: null,
     plan: { items: [], eval: { ok: false, violations: [], flags: {} } }, events: [], loan: null, landValue: scenario.landValue, player: { ...scenario.player },
-    rates: Object.fromEntries(Object.entries(LENDERS).map(([b, L]) => [b, L.rate])), site: null };
+    rates: Object.fromEntries(Object.entries(LENDERS).map(([b, L]) => [b, L.rate])), site: null, parcelId: 'DEMO-0001', acres: 5, invoices: [], refs: {} };
   deliver(g, 'permitting', { subject: 'Welcome to King County Permitting', verdict: { kind: 'welcome' }, day: 0 });
   return g;
 }
@@ -63,13 +64,15 @@ export function draft(g, questId) {
 }
 
 /** Player sends an email. Returns { out, reply }. The reply is scheduled; tick() delivers it. */
-export function send(g, { npc, questId = null, body = '', subject, attachments = [] }) {
+export const payMode = q => (NPCS[q.npc]?.gov || q.npc.startsWith('bank-')) ? 'now' : 'invoice';
+export function send(g, { npc, questId = null, body = '', subject, attachments = [], form = null }) {
   if (g.outcome) throw new Error('game over');
   const q = questId ? questById[questId] : null;
   const out = { id: ++g.seq, from: 'me', to: npc, subject: subject || (q ? q.title : 'Question'), body, attachments, day: g.day, delivered: true, read: true };
   thread(g, npc).push(out);
-  g._to = npc; const v = verdict(g, q, attachments, body);
-  if (v.kind === 'accepted') { g.budget -= v.fee; g.spent += v.fee; g.quests[q.id] = 'pending'; }
+  if (form) out.form = form;
+  g._to = npc; g._form = form; const v = verdict(g, q, attachments, body);
+  if (v.kind === 'accepted') { if (!v.invoice) { g.budget -= v.fee; g.spent += v.fee; } g.quests[q.id] = 'pending'; }
   const reply = deliver(g, npc, { subject: 'Re: ' + out.subject, verdict: v, day: g.day + v.days });
   g.events.push({ day: g.day, type: 'sent', npc, quest: q?.id, verdict: v.kind });
   return { out, reply, verdict: v };
@@ -98,8 +101,12 @@ function verdict(g, q, attachments, body) {
     if (!g.plan.items.length) return { ...base, kind: 'needs-info', days: 3, missing: ['a site plan with your structures placed'] };
     return { ...base, kind: 'corrections', days: 7, violations: g.plan.eval.violations.slice(0, 6) };
   }
-  const fee = Math.round(feeFor(g, q));
-  if (fee > g.budget) return { ...base, kind: 'cant-pay', days: 1, fee, budget: g.budget };
+  if (FORMS[q.id] && NPCS[q.npc].gov) { const errors = checkForm(g, q.id, g._form || {}); if (errors.length) return { ...base, kind: 'form-errors', days: 3, form: FORMS[q.id].name, errors }; }
+  const overdue = openInvoices(g).filter(i => i.npc === q.npc && g.day > i.due);
+  if (overdue.length) return { ...base, kind: 'on-hold', days: 2, owed: overdue.reduce((a, i) => a + i.amount, 0), nos: overdue.map(i => i.no) };
+  if (q.loan === 'close' && openInvoices(g).some(i => i.lien)) return { ...base, kind: 'needs-info', days: 3, missing: ['clear title — a contractor filed a lien over an unpaid invoice; pay it first (RCW 60.04)'] };
+  const fee = Math.round(feeFor(g, q)), invoice = payMode(q) === 'invoice' && fee > 0;
+  if (!invoice && fee > g.budget) return { ...base, kind: 'cant-pay', days: 1, fee, budget: g.budget };
   const extra = []; let v_newRate = null;
   if (q.crew === 'bid') { const Q = crewQuote(g, q.npc), $$ = fmt$; extra.push(`Bid: trees ${$$(Q.cost.timber)} (${Q.dur.timber} days), stumps + erosion control ${$$(Q.cost.stumps)} (${Q.dur.stumps} days), pad grading ${$$(Q.cost.grade)} (${Q.dur.grade} days${CREWS[q.npc].rainDays ? `, includes ${CREWS[q.npc].rainDays} rain days` : ''}), driveway ${$$(Q.cost.road)} (${Q.dur.road} days).`, `Total ${$$(Q.total)} over about ${Q.totalDays} working days; ${$$(Q.deposit)} deposit to book. ${CREWS[q.npc].pitch}`); }
   if (q.id === 'cad') { const st = siteFindings(g); extra.push(st.stream ? 'Finding: a seasonal (Type N) stream crosses the parcel. You will need a stream study + buffer plan and a WDFW Hydraulic Project Approval before clearing.' : 'Finding: no streams, wetlands or steep slopes mapped on the parcel.', `About ${st.trees} trees stand in the build area.`); }
@@ -119,7 +126,12 @@ function verdict(g, q, attachments, body) {
     if (q.loan === 'land') extra.push(`Line of credit: ${fmt$(LAND_LINE.amount)} at ${(LAND_LINE.rate * 100).toFixed(1)}%, secured by your land (appraised ${fmt$(g.landValue)}). Interest-only monthly; paid off when the construction loan closes.`);
     if (q.loan === 'close') extra.push(`Funding ${fmt$(amt)} into your construction account at ${pct}%.`, `Interest-only payments of ${fmt$(amt * g.rates[q.npc] / 12)}/month start now; after final inspection it converts to ${fmt$(monthlyPayment(amt, g.rates[q.npc]))}/month for 30 years.`);
   }
-  return { ...base, kind: 'accepted', days: daysFor(g, q), fee, gives: q.gives.map(docName), est: !!q.est, extra, newRate: v_newRate };
+  const refNo = issueRef(g, q.id);
+  if (refNo) extra.push(['designer', 'driller'].includes(q.id) ? `Our ${REF_PREFIX[q.id][1]}: ${refNo} (you'll need it on county and state forms).` : `Your ${REF_PREFIX[q.id][1]}: ${refNo} (keep it; later forms ask for it).`);
+  if (q.id === 'drill') extra.push(`Pump test yield: ${g.refs.yield} gpm. Water samples sent to the lab.`);
+  if (q.id === 'survey') extra.push(`Clearing limits staked: ${g.refs.clearing.toLocaleString('en-US')} sq ft.`);
+  if (invoice) extra.push(`We'll send an invoice for ${fmt$(fee)} when the work is done${q.crew === 'hire' ? ' (deposit due on booking)' : ' (net 30)'}.`);
+  return { ...base, kind: 'accepted', days: daysFor(g, q), fee, invoice, gives: q.gives.map(docName), est: !!q.est, extra, newRate: v_newRate, ref: refNo };
 }
 
 /** Advance to `day`; deliver due mail and apply its effects. Returns newly delivered messages. */
@@ -140,7 +152,9 @@ export function tick(g, day) {
       if (v.newRate != null) { g.rates[q.npc] = v.newRate; if (q.loan === 'points') (g.pointsBought ||= {})[q.npc] = true; }
       if (q.loan === 'close' && !g.loan) { const amt = loanAmountFor(g, q.npc); g.loan = { bank: q.npc, amount: amt, rate: g.rates[q.npc], fundedDay: m.deliverDay, months: 0, interest: 0 }; g.budget += amt; }
       g.events.push({ day: m.deliverDay, type: 'done', npc, quest: q.id });
+      if (v.invoice) newInvoice(g, npc, q, v.fee, m.deliverDay, q.crew === 'hire' ? 0 : 30);
     }
+    if (v?.kind === 'negotiated') applyTerms(g, v);
   }
   if (g.landLine?.open) { const due = Math.floor((g.day - g.landLine.fundedDay) / 30); while (g.landLine.months < due) { const i = g.landLine.amount * g.landLine.rate / 12; g.landLine.months++; g.budget -= i; g.spent += i; } }
   if (g.loan) { // interest-only payments every 30 days until occupancy
@@ -152,8 +166,13 @@ export function tick(g, day) {
     const frac = (g.day - g.loan.fundedDay - g.loan.months * 30) / 30, i = Math.max(0, frac) * g.loan.amount * g.loan.rate / 12;
     g.loan.interest += i; g.budget -= i; g.spent += i; g.loan.settled = true;
   }
+  for (const inv of openInvoices(g)) { // late fees (1.5% per 30 days overdue) and liens after 30 days overdue
+    const late = Math.floor((g.day - inv.due) / 30);
+    while ((inv.lateCount || 0) < late) { inv.lateCount = (inv.lateCount || 0) + 1; const f = Math.round(inv.amount * 0.015); inv.amount += f; inv.lateFees = (inv.lateFees || 0) + f; }
+    if (!inv.lien && g.day - inv.due > 30) { inv.lien = true; deliver(g, inv.npc, { subject: `Notice of lien — Invoice #${inv.no}`, verdict: { kind: 'lien', no: inv.no, title: inv.title, amount: inv.amount }, day: g.day }).delivered = true; }
+  }
   if (!g.outcome && g.budget < 0) g.outcome = { won: false, day: g.day, reason: 'Out of money — the construction loan interest ate your cash' };
-  if (!g.outcome && g.docs.includes('occupancy') && g.docs.includes('homeowners')) g.outcome = { won: true, day: g.day, spent: g.spent, budget: g.budget, mortgage: g.loan ? monthlyPayment(g.loan.amount, g.loan.rate) : 0 };
+  if (!g.outcome && g.docs.includes('occupancy') && g.docs.includes('homeowners') && !openInvoices(g).length) g.outcome = { won: true, day: g.day, spent: g.spent, budget: g.budget, mortgage: g.loan ? monthlyPayment(g.loan.amount, g.loan.rate) : 0 };
   else if (!g.outcome && g.day > g.scenario.deadlineDay) g.outcome = { won: false, day: g.day, reason: `Deadline: day ${g.scenario.deadlineDay}` };
   return out.sort((a, b) => a.deliverDay - b.deliverDay);
 }
@@ -187,6 +206,9 @@ export function summary(g) {
   if (!Object.values(g.quests).some((s, i) => s !== 'open' && QUESTS[i]?.loan === 'prequal')) warnings.push('No lender yet: get pre-qualified at a bank early; you need a construction loan for the home.');
   if (g.quests.cad === 'done' && !g.crew) warnings.push('No site-work crew hired yet: get bids from the three crews and hire one.');
   if (g.docs.includes('home-set') && !g.docs.includes('homeowners')) warnings.push('You need homeowners insurance before you can move in.');
+  const bills = openInvoices(g), overdueB = bills.filter(i => g.day > i.due);
+  if (overdueB.length) warnings.push(`${overdueB.length} bill(s) overdue (${fmt$(overdueB.reduce((a, i) => a + i.amount, 0))}). Overdue contractors stop work; after 30 days they file a lien that blocks your loan.`);
+  if (g.docs.includes('occupancy') && bills.length) warnings.push('Final inspection passed — pay every open bill to move in.');
   const left = g.scenario.deadlineDay - g.day;
   if (left < 45 && !g.outcome) warnings.push(`Only ${left} days left before the deadline.`);
   const nd = nextMailDay(g);
@@ -197,5 +219,76 @@ export function summary(g) {
     progress: { done: core.filter(q => q.status === 'done').length, total: core.length },
     ready: ready.map(title), pending, blocked, nextMailDay: Number.isFinite(nd) ? nd : null, docs: g.docs.map(docName), warnings,
     home: g.plan.eval.flags.home?.name || null,
+    bills: bills.map(i => ({ no: i.no, from: NPCS[i.npc].name.split(' —')[0], title: i.title, amount: i.amount, due: i.due, overdue: g.day > i.due, lien: !!i.lien })),
+    billsTotal: bills.reduce((a, i) => a + i.amount, 0),
   };
+}
+
+// ---- Bills: invoices, payment, negotiation
+export const openInvoices = g => (g.invoices || []).filter(i => i.status === 'open');
+function newInvoice(g, npc, q, amount, day, net) {
+  g.invoices ||= []; const inv = { no: 1001 + g.invoices.length, npc, quest: q.id, title: q.title, amount: Math.round(amount), issued: day, due: day + net, status: 'open' };
+  g.invoices.push(inv);
+  const m = deliver(g, npc, { subject: `Invoice #${inv.no} — ${q.title}`, verdict: { kind: 'invoice', no: inv.no, title: q.title, amount: inv.amount, due: inv.due, net }, day });
+  m.delivered = m.deliverDay <= g.day; m.invoice = inv.no; return inv;
+}
+export const amountDue = (g, inv) => inv.discount && g.day <= inv.discountUntil ? Math.round(inv.amount * (1 - inv.discount)) : inv.amount;
+export function payInvoice(g, no) {
+  const inv = (g.invoices || []).find(i => i.no === no); if (!inv || inv.status !== 'open') return { ok: false, error: 'No open invoice' };
+  const amt = amountDue(g, inv); if (amt > g.budget) return { ok: false, error: `Not enough cash: ${fmt$(amt)} due, ${fmt$(g.budget)} available` };
+  g.budget -= amt; g.spent += amt; inv.status = 'paid'; inv.paid = amt; inv.paidDay = g.day;
+  thread(g, inv.npc).push({ id: ++g.seq, from: 'me', to: inv.npc, subject: `Payment — Invoice #${no}`, body: `Paid ${fmt$(amt)} for "${inv.title}".`, day: g.day, delivered: true, read: true });
+  const m = deliver(g, inv.npc, { subject: `Receipt — Invoice #${no}`, verdict: { kind: 'receipt', no, amount: amt, title: inv.title, saved: inv.amount - amt, lien: inv.lien }, day: g.day });
+  m.delivered = true; return { ok: true, amount: amt, reply: m };
+}
+export function negotiateInvoice(g, no, body = '') {
+  const inv = (g.invoices || []).find(i => i.no === no); if (!inv || inv.status !== 'open') return { ok: false, error: 'No open invoice' };
+  if (inv.negotiated) return { ok: false, error: 'You already negotiated this bill' };
+  inv.negotiated = true;
+  thread(g, inv.npc).push({ id: ++g.seq, from: 'me', to: inv.npc, subject: `Re: Invoice #${no}`, body: body || `Is there any flexibility on Invoice #${no} (${fmt$(inv.amount)})?`, day: g.day, delivered: true, read: true });
+  const T = g.soured?.[inv.npc] ? { none: 'After your legal threat, we only discuss billing in writing through counsel. The invoice stands.' } : BILL_TERMS[inv.npc] || { discount: 0.03 };
+  const v = T.none ? { kind: 'negotiated', no, outcome: 'none', reason: T.none, title: inv.title }
+    : T.plan ? { kind: 'negotiated', no, outcome: 'plan', half: Math.round(inv.amount / 2), title: inv.title }
+    : { kind: 'negotiated', no, outcome: 'discount', pct: T.discount, amount: inv.amount, title: inv.title };
+  const reply = deliver(g, inv.npc, { subject: `Re: Invoice #${no}`, verdict: v, day: g.day + 2 });
+  return { ok: true, reply };
+}
+function applyTerms(g, v) {
+  const inv = g.invoices.find(i => i.no === v.no); if (!inv || inv.status !== 'open' || inv.terms) return; inv.terms = v.outcome;
+  if (v.outcome === 'discount') { inv.discount = v.pct; inv.discountUntil = g.day + 7; v.until = inv.discountUntil; v.price = Math.round(inv.amount * (1 - v.pct)); }
+  if (v.outcome === 'plan') { const rest = inv.amount - v.half; inv.amount = v.half; inv.due = Math.max(inv.due, g.day + 7);
+    const q = questById[inv.quest]; const b = newInvoice(g, inv.npc, q, rest, g.day, 45); b.title = inv.title + ' (2nd installment)'; b.terms = 'plan'; b.negotiated = true; }
+}
+
+/** Poke an NPC about replies you're waiting on: the first follow-up per message cuts the remaining wait ~30%. */
+export function followUp(g, npc) {
+  const waiting = (g.threads[npc] || []).filter(m => !m.delivered && m.from !== 'me'); if (!waiting.length) return { ok: false, error: 'Nothing pending with them' };
+  const fresh = waiting.filter(m => !m.poked);
+  for (const m of fresh) { const left = m.deliverDay - g.day; m.deliverDay = g.day + Math.max(1, Math.ceil(left * 0.7)); m.poked = true; }
+  thread(g, npc).push({ id: ++g.seq, from: 'me', to: npc, subject: 'Following up', body: `Just following up on my earlier message${waiting[0].verdict?.title ? ` about "${waiting[0].verdict.title}"` : ''}. Any update?`, day: g.day, delivered: true, read: true });
+  return { ok: true, sped: fresh.length > 0, day: Math.min(...waiting.map(m => m.deliverDay)) };
+}
+
+export const LEGAL_FEE = 750; // attorney-drafted demand letter (game estimate)
+/** "Threaten legal action." Costs an attorney letter. Deterministic, and teaches what actually works. */
+export function threaten(g, npc) {
+  const n = NPCS[npc]; if (!n || n.official) return { ok: false, error: 'You can\'t sue an official over their views — testify or comment instead.' };
+  if (g.budget < LEGAL_FEE) return { ok: false, error: `An attorney demand letter costs ${fmt$(LEGAL_FEE)}; you have ${fmt$(g.budget)}.` };
+  g.budget -= LEGAL_FEE; g.spent += LEGAL_FEE; g.legalSpent = (g.legalSpent || 0) + LEGAL_FEE;
+  const t = g.threads[npc] || [], waiting = t.filter(m => !m.delivered && m.from !== 'me');
+  const owed = openInvoices(g).filter(i => i.npc === npc && g.day > i.due);
+  thread(g, npc).push({ id: ++g.seq, from: 'me', to: npc, subject: 'Formal notice', body: n.gov ? `[Attorney letter, ${fmt$(LEGAL_FEE)}] If I do not get a response on my application, I will pursue legal action.` : `[Attorney letter, ${fmt$(LEGAL_FEE)}] This is a formal demand. If the work is not completed promptly I will pursue my legal remedies, including a claim against your contractor bond.`, day: g.day, delivered: true, read: true });
+  let v;
+  if (n.gov) v = { kind: 'legal', outcome: 'gov', title: waiting[0]?.verdict?.title || null };
+  else if (owed.length) {
+    v = { kind: 'legal', outcome: 'backfire', owed: owed.reduce((a, i) => a + i.amount, 0), nos: owed.map(i => i.no) };
+    for (const i of owed) { i.lien = true; i.due = Math.min(i.due, g.day - 31); }
+  } else {
+    const fresh = waiting.filter(m => !m.lawyered);
+    for (const m of fresh) { m.deliverDay = g.day + Math.max(1, Math.ceil((m.deliverDay - g.day) * 0.5)); m.lawyered = true; }
+    (g.soured ||= {})[npc] = true;
+    v = { kind: 'legal', outcome: fresh.length ? 'sped' : 'nothing-pending', day: fresh.length ? Math.min(...fresh.map(m => m.deliverDay)) : null };
+  }
+  const reply = deliver(g, npc, { subject: 'Re: Formal notice', verdict: v, day: g.day + 1 });
+  return { ok: true, outcome: v.outcome, reply, fee: LEGAL_FEE };
 }

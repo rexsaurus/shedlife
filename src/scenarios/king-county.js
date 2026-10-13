@@ -112,6 +112,12 @@ export const AGENCIES = {
   },
 };
 
+// Government bodies take application forms and are paid on submission; everyone else invoices after the work.
+for (const id of ['permitting', 'health', 'ecology', 'lni', 'wdfw']) AGENCIES[id].gov = true;
+// How each invoicer responds to "can we negotiate this bill?" (game rules): prompt-pay discount, or a 2-part payment plan.
+export const BILL_TERMS = { 'crew-cheap': { plan: true }, 'crew-fast': { discount: 0.03 }, excavator: { discount: 0.05 }, builder: { discount: 0.02 },
+  septicer: { discount: 0.04 }, designer: { discount: 0.05 }, driller: { discount: 0.03 }, surveyor: { discount: 0.05 }, biologist: { discount: 0.05 },
+  utility: { plan: true }, insurer: { none: 'Premiums are filed rates; we can\'t discount them.' }, titleco: { none: 'Title premiums are set by our filed rate schedule.' } };
 // Everyone you can write to: agencies + contractors + (fictional) officials of real bodies.
 export const NPCS = { ...AGENCIES, ...OFFICIALS };
 

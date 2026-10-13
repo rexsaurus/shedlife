@@ -16,7 +16,7 @@
  /* inbox */
  #inbox{top:10px;left:10px;bottom:10px;width:380px;display:flex;flex-direction:column;overflow:hidden}
  #inbox header{padding:10px 12px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
- #threads{overflow:auto;border-bottom:1px solid var(--line);max-height:30%;flex:none}
+ #threads{overflow:auto;flex:1}
  .th{display:flex;gap:9px;padding:8px 12px;cursor:pointer;border-bottom:1px solid #efe9dc;align-items:center}
  .th:hover{background:#f3eee2} .th.sel{background:#e6efe8} .th .av{font-size:20px;width:26px;text-align:center}
  .th .nm{font-weight:600} .th .sub{color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
@@ -42,9 +42,9 @@
  .q.done .t{color:var(--green);text-decoration:line-through;text-decoration-color:#2d6a4f66} .q.locked{opacity:.55}
  #docs li,#viol li{font-size:12px;margin:2px 0} #docs,#viol{padding-left:16px;margin:4px 0 10px} #viol li{color:var(--red)}
  /* build bar */
- #bar{bottom:10px;left:400px;right:330px;padding:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:center}
+ #bar{bottom:10px;left:350px;right:330px;padding:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;justify-content:center}
  #bar .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
- #clock{font-variant-numeric:tabular-nums;font-weight:700;min-width:64px;text-align:center}
+ #clock{font-variant-numeric:tabular-nums;font-weight:700;min-width:140px;text-align:center}
  #tip{position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:#1f2a24e6;color:#fff;padding:6px 12px;border-radius:8px;pointer-events:none;font-size:12px;max-width:560px;text-align:center;display:none}
  #toast{position:fixed;top:64px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 14px;border-radius:8px;display:none;box-shadow:0 4px 18px #0004;cursor:pointer;z-index:5}
  #modal{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;z-index:10}
@@ -52,6 +52,10 @@
  #modal h1{margin:0 0 8px;font-size:24px} #modal p{margin:6px 0}
  #parcel{font-size:12px;color:var(--mute);margin-bottom:10px}
  .claude{font-size:10px;color:var(--mute)}
+ #convo{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(780px,94vw);height:min(88vh,860px);display:none;flex-direction:column;overflow:hidden;z-index:7}
+ #convo.open{display:flex} #convoBack{position:fixed;inset:0;background:#0006;display:none;z-index:6} #convoBack.open{display:block}
+ #convoClose{position:absolute;top:8px;right:8px;z-index:2}
+ #inbox{width:330px}
  #inboxTab{position:fixed;top:10px;left:10px;display:none;padding:10px 12px;font-weight:700;z-index:3}
  body.inbox-closed #inbox{display:none} body.inbox-closed #inboxTab{display:block} body.inbox-closed #bar{left:10px}
  .th.pin{background:#fff6dc} .th.pin.sel{background:#f3e7bd}
@@ -59,6 +63,15 @@
  .sumgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
  .sumgrid div{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px} .sumgrid small{display:block;color:var(--mute);font-size:10px;text-transform:uppercase;letter-spacing:.05em} .sumgrid b{font-size:16px}
  .sumcols{display:grid;grid-template-columns:1fr 1fr;gap:14px} .sumcols ul{margin:4px 0 10px;padding-left:18px} .sumcols li{margin:2px 0}
+ #cForm{display:none;background:#fff;border:1px solid #cfc8b8;border-radius:8px;padding:8px;margin:6px 0;max-height:220px;overflow:auto}
+ #cForm .fh{display:flex;justify-content:space-between;align-items:center;font-weight:700;margin-bottom:4px}
+ #cForm label{display:block;font-size:12px;margin:5px 0 1px} #cForm input[type=text],#cForm input[type=number],#cForm select{width:100%;font:inherit;padding:3px 5px;border:1px solid #cfc8b8;border-radius:5px}
+ #cForm .hint{font-size:10px;color:var(--mute)}
+ #cState .box{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px} #cState .box.need{border-color:#e7b9b4;background:#fff3f1}
+ #cState .row{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+ .dot.red{background:var(--red)}
+ .msg .acts{margin-top:6px;display:flex;gap:6px} .msg.inv{border-color:#d9c48a;background:#fffbef}
+ table.bills{width:100%;border-collapse:collapse;font-size:13px} table.bills td,table.bills th{padding:6px;border-bottom:1px solid var(--line);text-align:left} table.bills .od{color:var(--red);font-weight:700}
  .warn{background:#fff3d6;border:1px solid #ecd49a;border-radius:8px;padding:8px 10px;margin:4px 0}
  canvas.pt{width:30px;height:30px;image-rendering:pixelated;border-radius:5px;flex:none;box-shadow:0 0 0 1px #0003}
  canvas.ptBig{width:84px;height:84px;image-rendering:pixelated;border-radius:8px;box-shadow:0 0 0 2px #1f2a24;flex:none}
@@ -86,23 +99,28 @@
  <div class="stat"><small>Steps</small><b id="sProgress">0/0</b></div>
  <div class="stat"><small>Loan</small><b id="sLoan" style="font-size:12px">none</b></div>
  <div class="stat"><small>NPC voice</small><b id="sVoice" style="font-size:12px">…</b></div>
- <button id="topSummary">📋 Summary</button><button id="topMap">🗺 Washington</button><button id="topShop">🛒 Shop</button>
+ <button id="topSummary">📋 Summary</button><button id="topBills">💵 Bills <span id="billCount" class="badge b-answer" style="display:none"></span></button><button id="topMap">🗺 Washington</button><button id="topShop">🛒 Shop</button>
 </div>
 
 <div id="inbox" class="panel">
  <header><h2 style="margin:0"><button id="inboxClose" title="Hide inbox" style="padding:1px 7px;margin-right:4px">⟨</button>Inbox <span id="unread"></span></h2><span><button data-tab="agencies" class="on">📨 Agencies</button> <button data-tab="officials">🏛️ Officials</button></span></header>
  <div id="threads"></div>
+</div>
+
+<div id="convoBack"></div>
+<div id="convo" class="panel"><button id="convoClose" title="Close (Esc)">✕</button>
  <div id="threadHead"></div>
  <div id="thread"></div>
  <div id="compose">
   <div id="composeRow"><b id="cTo">To: —</b><a id="realMail" target="_blank" rel="noopener"></a></div>
-  <select id="cQuest" style="margin-top:6px"></select>
+  <div id="cState"></div>
+  <div id="cFields"><select id="cQuest" style="margin-top:6px"></select>
   <div id="atts"></div>
+  <div id="cForm"></div>
   <textarea id="cBody" placeholder="Write your email…"></textarea>
-  <div style="display:flex;gap:6px;align-items:center"><button id="send" class="primary">Send ✉</button><span id="cHint" class="claude"></span></div>
+  <div style="display:flex;gap:6px;align-items:center"><button id="send" class="primary">Send ✉</button><span id="cHint" class="claude"></span></div></div>
  </div>
 </div>
-
 <button id="inboxTab" class="panel" title="Show inbox">✉ Inbox <span id="tabCount" class="badge b-answer" style="display:none"></span></button>
 <div id="quests" class="panel">
  <div id="parcel">Loading parcel…</div>
@@ -117,8 +135,8 @@
  <button id="rotate" title="R">⟳</button><button id="erase" title="X: click a structure to remove it">🗑</button>
  <span class="sep"></span>
  <span id="clock">Day 0</span>
- <button data-speed="0">⏸</button><button data-speed="1440" class="on">1 day/s</button><button data-speed="10080">1 wk/s</button>
- <button id="skip" title="Jump to the next reply">⏭ Next mail</button>
+ <button data-speed="0" title="Pause (space)">⏸</button><button data-speed="120" class="on" title="2 hours per second — watch the day go by">&gt;</button><button data-speed="1440" title="1 day per second">&gt;&gt;</button><button data-speed="10080" title="1 week per second (pauses when mail arrives)">&gt;&gt;&gt;</button>
+ <button id="skip" style="display:none"></button>
 </div>
 <div id="tip"></div>
 <div id="wamap"><div id="wamapCanvas"></div>

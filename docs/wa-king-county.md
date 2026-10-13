@@ -39,3 +39,12 @@ Septic installed (pressurized/treatment, Western WA) $20–45K + $3–6K design;
 
 ## Kittitas County (next scenario)
 County permits; Kittitas County Public Health (509-962-7515) for septic + adequate water supply determination; new exempt wells in the Yakima basin need water-bank mitigation and metering (WAC 173-539A) — a natural "hard mode".
+
+## Site work, habitat, insurance (checked 2026-10-12)
+- Clearing/grading (King County): RA zones need a clearing permit over 7,000 sq ft cleared or 5,000 board feet of merchantable timber; grading permit at 100 cu yd or 2,000 sq ft new impervious; any clearing in/near a critical area needs a permit; SEPA checklist above 500 cu yd. Whether it rides inside the residential permit: UNVERIFIED (county says forest-practice conversions "usually" do). [King County clearing & grading](https://kingcounty.gov/en/dept/local-services/certificates-permits-licenses/permits/permits-inspections-codes-buildings-land-use/permit-forms-application-materials/land-use/clearing-grading)
+- Drainage review: 2,000 sq ft new+replaced impervious or 7,000 sq ft land disturbing (Surface Water Design Manual; checked against 2009 errata — current edition UNVERIFIED).
+- WDFW HPA: online via APPS; 45-day decision (RCW 77.55.021(7)(b)); the $150 fee (RCW 77.55.321) expired 2017 — game uses $0. [WDFW HPA application](https://wdfw.wa.gov/licenses/environmental/hpa/application)
+- Stream buffers outside the UGA: Type N 65 ft + 15 ft building setback (verified from a county critical-areas letter); Type S/F 165 ft UNVERIFIED.
+- Forest practices: >5,000 board feet harvested needs a forest practice permit; King County processes Class IV-General conversions (usually within the building permit); other classes go to DNR outside the UGA. Not yet a quest.
+- Insurance: builder's risk during construction and homeowners at completion are required by construction-to-permanent lenders (PNC guide); lender's title policy UNVERIFIED as universal. WA OIC consumer hotline 800-562-6900, insurance.wa.gov.
+- Rate negotiation and discount points are game rules (match within 0.50% floor; 1 point = 1% of loan for 0.25%).

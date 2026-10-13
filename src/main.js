@@ -70,10 +70,24 @@ function buildWorld(data) {
   const sb = 3.048, inner = ringM.map(([x, y], i) => { const [cx, cy] = ringM.reduce((a, p) => [a[0] + p[0] / ringM.length, a[1] + p[1] / ringM.length], [0, 0]); const d = Math.hypot(x - cx, y - cy); return [x - (x - cx) / d * sb * 1.2, y - (y - cy) / d * sb * 1.2]; });
   const dash = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(inner.map(([x, y]) => new THREE.Vector3(x, heightAt(x, -y) + 0.15, -y))), new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 1.2, gapSize: 1, transparent: true, opacity: 0.6 }));
   dash.computeLineDistances(); world.add(dash);
+  // trees standing inside the lot (cleared by the "Clear, grade + driveway" step)
+  lotTrees = new THREE.Group(); world.add(lotTrees);
+  const xs2 = ringM.map(p => p[0]), ys2 = ringM.map(p => p[1]);
+  const want = Math.min(70, Math.round(polygonArea(ringM) / 260));
+  for (let i = 0, n = 0; i < 600 && n < want; i++) {
+    const x = Math.min(...xs2) + Math.random() * (Math.max(...xs2) - Math.min(...xs2)), y = Math.min(...ys2) + Math.random() * (Math.max(...ys2) - Math.min(...ys2));
+    if (!pointInPolygon([x, y], ringM)) continue; n++;
+    const s = 0.6 + Math.random() * 0.7, t = new THREE.Group();
+    const a = new THREE.Mesh(new THREE.CylinderGeometry(0.22 * s, 0.28 * s, 2 * s, 5), trunk); a.position.y = s;
+    const b = new THREE.Mesh(new THREE.ConeGeometry(1.6 * s, 6.5 * s, 6), crown); b.position.y = 4.6 * s;
+    t.add(a, b); t.position.set(x, heightAt(x, -y), -y); t.traverse(m => m.castShadow = true); lotTrees.add(t);
+  }
+  streamMesh = null;
   areaM2 = polygonArea(ringM); hs = elevation.heights;
 }
 
 // ---------------------------------------------------------------- game state
+let lotTrees = null, streamMesh = null;
 let g, clock, plan = [], uid = 0, tool = null, rot = 0, ghost = null, valid = false, selNpc = 'permitting', erase = false;
 const lot = () => ({ ring: ringM, zoning: parcel.zoning || 'RA-5' });
 
@@ -82,9 +96,18 @@ function startGame() {
   g.threads.permitting[0].body = `Welcome. You own ${parcel.acres?.toFixed(1)} acres in ${parcel.jurisdiction || parcel.county + ' County'}${parcel.zoning ? `, zoned ${parcel.zoning}` : ' (zoning not published statewide; we apply RA-5 rural rules)'}.${parcel.county && parcel.county !== 'King' ? `\n\nHeads up: this permit path is modeled on King County. ${parcel.county} County's agencies differ in the real world.` : ''}\n\nTo live there legally you need water, septic, power, a building permit and a final inspection. Start by asking us what can be built, then shop for a home and place it with a well and drainfield on the map.\n\nEvery request is an email. Agencies reply on the clock; use ⏭ to wait for mail. The 🏛️ Officials tab lets you talk to council members and commissioners.\n\n— King County Permitting`;
   clock = new SimClock(SCENARIO.startDate); clock.setSpeed(0);
   plan.splice(0).forEach(p => scene.remove(p.mesh));
-  syncPlan(); selNpc = 'permitting'; voice(g.threads.permitting[0], 'permitting'); render();
+  syncPlan(); syncSite(); selNpc = 'permitting'; voice(g.threads.permitting[0], 'permitting'); render();
 }
 
+function syncSite() {
+  if (lotTrees) lotTrees.visible = !g.docs.includes('site-cleared');
+  if (g.quests.cad === 'done' && g.site?.stream && !streamMesh) {
+    const xs = ringM.map(p => p[0]), ys = ringM.map(p => p[1]), y0 = Math.min(...ys) + (Math.max(...ys) - Math.min(...ys)) * 0.72;
+    const pts = []; for (let x = Math.min(...xs) - 30; x <= Math.max(...xs) + 30; x += 3) { const y = y0 + Math.sin(x / 9) * 4; pts.push(new THREE.Vector3(x, heightAt(x, -y) + 0.15, -y)); }
+    streamMesh = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, 0.9, 6), new THREE.MeshLambertMaterial({ color: 0x3d8bd4 }));
+    streamMesh.scale.y = 0.25; streamMesh.position.y = 0; world.add(streamMesh);
+  }
+}
 function syncPlan() {
   g.plan = { items: plan.map(({ uid, item, corners, slope }) => ({ uid, item, corners, slope })), eval: evaluate(plan, lot()) };
   const bad = new Set(g.plan.eval.violations.map(v => v.uid));
@@ -183,7 +206,7 @@ function advance() {
     setSpeed(0);
     const m = got[got.length - 1]; const n = NPCS[m.from];
     toast(`${n.avatar} ${n.name}: ${m.subject}${got.length > 1 ? ` (+${got.length - 1} more)` : ''}`, () => { selNpc = m.from; render(); });
-    syncPlan();
+    syncPlan(); syncSite();
   }
   if (g.outcome) { setSpeed(0); endModal(); }
   render();
@@ -299,7 +322,7 @@ function renderQuests() {
   const vs = g.plan.eval.violations;
   $('viol').innerHTML = !plan.length ? '<li style="color:var(--mute)">Place a home, a well and a septic drainfield on the lot.</li>' : vs.length ? vs.map(v => `<li title="${esc(v.ref)}">${esc(v.msg)}</li>`).join('') : '<li style="color:var(--green)">✓ Site plan meets the rules we check</li>';
   $('docs').innerHTML = g.docs.length ? g.docs.map(d => `<li>${docName(d)}</li>`).join('') : '<li style="color:var(--mute)">None yet</li>';
-  $('parcel').innerHTML = `<b>${parcel.county || 'King'} County · ${parcel.apn}</b><br>${parcel.zoning || 'zoning n/a (RA-5 rules)'} · ${parcel.acres?.toFixed(2)} ac · ${parcel.jurisdiction || ''}<br>${parcel.use || ''}${parcel.address ? ' · ' + parcel.address : ''}<br>Relief ${(Math.max(...hs) - Math.min(...hs)).toFixed(0)} m in view${(parcel.county || 'King') === 'King' ? ` · <a href="https://blue.kingcounty.com/Assessor/eRealProperty/Detail.aspx?ParcelNbr=${parcel.apn}" target="_blank" rel="noopener">Assessor ↗</a>` : ''}<br><button id="pickLand" style="margin-top:6px">🗺 Pick other land in Washington</button>`;
+  $('parcel').innerHTML = `<b>${parcel.county || 'King'} County · ${parcel.apn}</b><br>${parcel.zoning || 'zoning n/a (RA-5 rules)'} · ${parcel.acres?.toFixed(2)} ac · ${parcel.jurisdiction || ''}<br>${parcel.use || ''}${parcel.address ? ' · ' + parcel.address : ''}<br>Relief ${(Math.max(...hs) - Math.min(...hs)).toFixed(0)} m in view${(parcel.county || 'King') === 'King' ? ` · <a href="https://blue.kingcounty.com/Assessor/eRealProperty/Detail.aspx?ParcelNbr=${parcel.apn}" target="_blank" rel="noopener">Assessor ↗</a>` : ''}${g.quests.cad === 'done' && g.site ? `<br><b>Site:</b> ${g.site.stream ? '🌊 seasonal stream — buffer + HPA needed' : 'no streams or wetlands'} · ~${g.site.trees} trees in the build area` : ''}<br><button id="pickLand" style="margin-top:6px">🗺 Pick other land in Washington</button>`;
   $('pickLand').onclick = () => openMap(c);
 }
 
@@ -339,6 +362,16 @@ $('topMap').onclick = () => openMap(c);
 let shopTab = 'homes';
 const hex = n => '#' + n.toString(16).padStart(6, '0');
 const priceLabel = i => i.priceType === 'listed' ? 'listed price' : i.priceType === 'starting-at' ? 'starting at · excl. site work' : i.priceType === 'base-kit' ? 'base kit' : i.estPrice ? 'game estimate' : '';
+const thumbs = new Map(); let thumbR = null;
+function thumbFor(item) {
+  if (thumbs.has(item.id)) return thumbs.get(item.id);
+  thumbR ||= new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); thumbR.setSize(160, 120);
+  const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xffffff, 0x667755, 1.6)); const l = new THREE.DirectionalLight(0xffffff, 1.6); l.position.set(10, 20, 14); sc.add(l);
+  const m = makeStructure(item); sc.add(m);
+  const size = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()), k = Math.max(size.x, size.y, size.z) * 0.72;
+  const c2 = new THREE.OrthographicCamera(-k * 1.33, k * 1.33, k, -k, -100, 100); c2.position.set(10, 8, 10); c2.lookAt(0, size.y * 0.35, 0);
+  thumbR.render(sc, c2); const url = thumbR.domElement.toDataURL(); thumbs.set(item.id, url); return url;
+}
 function openShop(tab = shopTab) {
   shopTab = tab;
   const tabs = [...SHOP_TABS, ['all', 'Everything', () => true]];
@@ -352,7 +385,7 @@ function openShop(tab = shopTab) {
       i.factoryBuilt && i.kind !== 'accessory' && ['', 'Factory-built'], i.estFootprint && ['warn', 'Footprint estimated'], i.status === 'UNVERIFIED' && ['warn', 'Unverified listing'],
     ].filter(Boolean);
     const afford = !paidOnPlacement(i) || i.cost <= g.budget;
-    return `<div class="item"><div class="sw" style="background:${hex(i.color)};border-bottom:10px solid ${hex(i.roof)}">${ICON[i.kind]}</div><div class="body">
+    return `<div class="item"><img class="thumb" src="${thumbFor(i)}" alt=""><div class="body">
       <b>${esc(i.name)}</b><br><small>${esc(i.vendor || 'Site work')}${i.vendorCity ? ' · ' + esc(i.vendorCity) : ''}</small>
       <div>${i.wFt ? `${i.wFt}×${i.dFt} ft · ` : ''}${i.sqft} sq ft</div>
       <div class="price">${i.cost ? fmt$(i.cost) : 'priced by quests'} <small>${priceLabel(i)}</small></div>

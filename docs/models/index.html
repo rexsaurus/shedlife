@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Model Gallery</title>
+<style>body{margin:0;background:#cfe3ef;font:12px system-ui} #grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;padding:8px} .c{background:#fbf8f1;border-radius:8px;padding:4px;text-align:center} .c img{width:100%;display:block}</style></head>
+<body><div id="grid"></div>
+<script type="module">
+import * as THREE from 'three';
+import { CATALOG } from '/src/catalog.js';
+import { makeStructure } from '/src/meshes.js';
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true }); r.setSize(300, 220); r.shadowMap.enabled = true;
+for (const item of CATALOG.filter(i => !['well', 'septic', 'power'].includes(i.kind))) {
+  const scene = new THREE.Scene(); scene.add(new THREE.HemisphereLight(0xffffff, 0x667755, 1.5));
+  const sun = new THREE.DirectionalLight(0xffffff, 1.8); sun.position.set(10, 20, 14); sun.castShadow = true; scene.add(sun);
+  const m = makeStructure(item); scene.add(m);
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(40, 32), new THREE.MeshLambertMaterial({ color: 0x8fbf6a })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+  const size = new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()), s = Math.max(size.x, size.y, size.z) * 0.75;
+  const cam = new THREE.OrthographicCamera(-s * 1.36, s * 1.36, s, -s, -100, 100); cam.position.set(10, 8, 10); cam.lookAt(0, size.y * 0.35, 0);
+  r.render(scene, cam);
+  const c = document.createElement('div'); c.className = 'c'; c.innerHTML = `<img src="${r.domElement.toDataURL()}"><b>${item.name}</b><br>${item.vendor || ''} · ${item.style}`; document.getElementById('grid').appendChild(c);
+}
+window.__ready = true;
+</script></body></html>

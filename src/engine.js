@@ -1,12 +1,14 @@
 // ShedLife inbox engine. Pure game state: every move is an email to an NPC; replies arrive on the clock.
 // The engine decides every outcome deterministically. Claude (server/npc.mjs) only writes the words.
-import { NPCS, QUESTS, DOCS, questById, homePermitFee, LENDERS, SITE_BUDGET } from './scenarios/king-county.js';
+import { NPCS, QUESTS, DOCS, questById, homePermitFee, LENDERS, SITE_BUDGET, RATE_FLOOR } from './scenarios/king-county.js';
+import { rng } from './officials.js';
 import { scriptedReply } from './letters.js';
 
 export function newGame(scenario) {
   const quests = Object.fromEntries(QUESTS.map(q => [q.id, 'open']));
   const g = { scenario, day: 0, budget: scenario.budget, spent: 0, docs: [], quests, threads: {}, seq: 0, outcome: null,
-    plan: { items: [], eval: { ok: false, violations: [], flags: {} } }, events: [], loan: null, landValue: scenario.landValue, player: { ...scenario.player } };
+    plan: { items: [], eval: { ok: false, violations: [], flags: {} } }, events: [], loan: null, landValue: scenario.landValue, player: { ...scenario.player },
+    rates: Object.fromEntries(Object.entries(LENDERS).map(([b, L]) => [b, L.rate])), site: null };
   deliver(g, 'permitting', { subject: 'Welcome to King County Permitting', verdict: { kind: 'welcome' }, day: 0 });
   return g;
 }
@@ -20,12 +22,18 @@ function deliver(g, npc, { subject, verdict, day, body }) {
 }
 
 export const docName = id => DOCS[id] || id;
+// What's on the parcel (revealed by the CAD). Deterministic per parcel; tests may set g.site directly.
+export function siteFindings(g) {
+  if (!g.site) { const r = rng('site:' + (g.parcelId || 'demo')); g.site = { stream: r() < 0.4, trees: 20 + Math.floor(r() * 120) }; }
+  return g.site;
+}
+export const applies = (g, q) => !q.when || q.when(g);
 export const questsFor = (g, npc) => QUESTS.filter(q => q.npc === npc);
 
 // ---- loans (pure math, game estimates)
 export const monthlyPayment = (P, rate, years = 30) => { const r = rate / 12, n = years * 12; return P * r / (1 - (1 + r) ** -n); };
 export function prequalMax(g, bank) { // 43% DTI incl. ~$500/mo taxes+insurance, 30-year amortization at the lender's rate
-  const L = LENDERS[bank], pmt = 0.43 * g.player.income / 12 - g.player.debtsMonthly - 500, r = L.rate / 12, n = 360;
+  const pmt = 0.43 * g.player.income / 12 - g.player.debtsMonthly - 500, r = (g.rates?.[bank] ?? LENDERS[bank].rate) / 12, n = 360;
   return Math.max(0, Math.floor(pmt * (1 - (1 + r) ** -n) / r / 1000) * 1000);
 }
 export function loanAmountFor(g, bank) {
@@ -37,6 +45,7 @@ export function loanAmountFor(g, bank) {
 export function feeFor(g, q) {
   const home = g.plan.eval.flags.home;
   if (q.fee === 'loanClosing') return LENDERS[q.npc].closingPct * loanAmountFor(g, q.npc);
+  if (q.fee === 'points') return 0.01 * loanAmountFor(g, q.npc);
   if (q.fee === 'homePermit') return homePermitFee(home) + (g.plan.eval.flags.adu ? 4556 + 3618 + 2.46 * g.plan.eval.flags.adu.sqft : 0);
   if (q.fee === 'homeCost') return (home?.cost || 0) + (g.plan.eval.flags.adu?.cost || 0);
   return q.fee + (q.slopeFee && g.plan.eval.flags.steepSlope ? q.slopeFee : 0);
@@ -74,7 +83,8 @@ function verdict(g, q, attachments, body) {
   if (q.loan === 'prequal' && g.player.credit < LENDERS[q.npc].minCredit) return { ...base, kind: 'declined', days: 2, reason: `credit score ${g.player.credit} is below our ${LENDERS[q.npc].minCredit} minimum` };
   if (g.quests[q.id] === 'pending') return { ...base, kind: 'pending', days: 1 };
   if (q.requiresHome && !g.plan.eval.flags.home) return { ...base, kind: 'needs-info', days: 2, missing: ['a home on your site plan'] };
-  const early = q.after.filter(a => g.quests[a] !== 'done');
+  if (!applies(g, q)) return { ...base, kind: 'not-needed', days: 1 };
+  const early = q.after.filter(a => g.quests[a] !== 'done' && applies(g, questById[a]));
   if (early.length) return { ...base, kind: 'too-early', days: 2, first: early.map(a => questById[a].title) };
   const missing = q.needs.filter(d => !attachments.includes(d) || (d !== 'site-plan' && !g.docs.includes(d)));
   if (missing.length) return { ...base, kind: 'needs-info', days: 3, missing: missing.map(docName) };
@@ -84,15 +94,24 @@ function verdict(g, q, attachments, body) {
   }
   const fee = Math.round(feeFor(g, q));
   if (fee > g.budget) return { ...base, kind: 'cant-pay', days: 1, fee, budget: g.budget };
-  const extra = [];
+  const extra = []; let v_newRate = null;
+  if (q.id === 'cad') { const st = siteFindings(g); extra.push(st.stream ? 'Finding: a seasonal (Type N) stream crosses the parcel. You will need a stream study + buffer plan and a WDFW Hydraulic Project Approval before clearing.' : 'Finding: no streams, wetlands or steep slopes mapped on the parcel.', `About ${st.trees} trees stand in the build area.`); }
   if (q.loan) {
-    const L = LENDERS[q.npc], amt = loanAmountFor(g, q.npc), pct = (L.rate * 100).toFixed(2);
+    const L = LENDERS[q.npc], amt = loanAmountFor(g, q.npc), pct = (g.rates[q.npc] * 100).toFixed(3);
+    const rate = g.rates[q.npc]; const pctNow = (rate * 100).toFixed(3).replace(/0$/, '');
+    if (q.loan === 'negotiate') {
+      const other = Object.keys(LENDERS).find(o => o !== q.npc), comp = g.rates[other], floor = L.rate - RATE_FLOOR;
+      const offer = Math.max(floor, +(comp - 0.00125).toFixed(5));
+      if (offer >= rate) return { ...base, kind: 'no-better', days: 2, rate: pctNow, comp: (comp * 100).toFixed(3), floor: offer >= rate && comp > rate };
+      v_newRate = offer; extra.push(`Rate lowered from ${pctNow}% to ${(offer * 100).toFixed(3)}% to beat the competing Loan Estimate (${(comp * 100).toFixed(3)}%).`);
+    }
+    if (q.loan === 'points') { if (g.pointsBought?.[q.npc]) return { ...base, kind: 'duplicate', days: 1 }; v_newRate = +(rate - 0.0025).toFixed(5); extra.push(`One discount point bought: rate ${pctNow}% → ${(v_newRate * 100).toFixed(3)}%.`); }
     if (q.loan === 'prequal') extra.push(`Pre-qualified for up to ${fmt$(prequalMax(g, q.npc))} at ${pct}% (construction-to-permanent, 30-year fixed after completion; game estimate).`, `Underwriting basis: income ${fmt$(g.player.income)}/yr, debts ${fmt$(g.player.debtsMonthly)}/mo, credit ${g.player.credit}, 43% debt-to-income.`);
     if (q.loan === 'apply') { if (!amt) return { ...base, kind: 'needs-info', days: 2, missing: ['a home on your site plan'] };
       extra.push(`Approved loan amount: ${fmt$(amt)} (capped at ${L.maxLtv * 100}% of the as-completed value, the build budget, and your pre-qualification).`, 'We fund after the building permit is issued.'); }
-    if (q.loan === 'close') extra.push(`Funding ${fmt$(amt)} into your construction account.`, `Interest-only payments of ${fmt$(amt * L.rate / 12)}/month start now; after final inspection it converts to ${fmt$(monthlyPayment(amt, L.rate))}/month for 30 years.`);
+    if (q.loan === 'close') extra.push(`Funding ${fmt$(amt)} into your construction account at ${pct}%.`, `Interest-only payments of ${fmt$(amt * g.rates[q.npc] / 12)}/month start now; after final inspection it converts to ${fmt$(monthlyPayment(amt, g.rates[q.npc]))}/month for 30 years.`);
   }
-  return { ...base, kind: 'accepted', days: daysFor(g, q), fee, gives: q.gives.map(docName), est: !!q.est, extra };
+  return { ...base, kind: 'accepted', days: daysFor(g, q), fee, gives: q.gives.map(docName), est: !!q.est, extra, newRate: v_newRate };
 }
 
 /** Advance to `day`; deliver due mail and apply its effects. Returns newly delivered messages. */
@@ -107,7 +126,8 @@ export function tick(g, day) {
       const q = questById[v.quest];
       g.quests[q.id] = 'done';
       for (const d of q.gives) if (!g.docs.includes(d)) g.docs.push(d);
-      if (q.loan === 'close' && !g.loan) { const amt = loanAmountFor(g, q.npc); g.loan = { bank: q.npc, amount: amt, rate: LENDERS[q.npc].rate, fundedDay: m.deliverDay, months: 0, interest: 0 }; g.budget += amt; }
+      if (v.newRate != null) { g.rates[q.npc] = v.newRate; if (q.loan === 'points') (g.pointsBought ||= {})[q.npc] = true; }
+      if (q.loan === 'close' && !g.loan) { const amt = loanAmountFor(g, q.npc); g.loan = { bank: q.npc, amount: amt, rate: g.rates[q.npc], fundedDay: m.deliverDay, months: 0, interest: 0 }; g.budget += amt; }
       g.events.push({ day: m.deliverDay, type: 'done', npc, quest: q.id });
     }
   }
@@ -120,7 +140,7 @@ export function tick(g, day) {
     g.loan.interest += i; g.budget -= i; g.spent += i; g.loan.settled = true;
   }
   if (!g.outcome && g.budget < 0) g.outcome = { won: false, day: g.day, reason: 'Out of money — the construction loan interest ate your cash' };
-  if (!g.outcome && g.docs.includes('occupancy')) g.outcome = { won: true, day: g.day, spent: g.spent, budget: g.budget, mortgage: g.loan ? monthlyPayment(g.loan.amount, g.loan.rate) : 0 };
+  if (!g.outcome && g.docs.includes('occupancy') && g.docs.includes('homeowners')) g.outcome = { won: true, day: g.day, spent: g.spent, budget: g.budget, mortgage: g.loan ? monthlyPayment(g.loan.amount, g.loan.rate) : 0 };
   else if (!g.outcome && g.day > g.scenario.deadlineDay) g.outcome = { won: false, day: g.day, reason: `Deadline: day ${g.scenario.deadlineDay}` };
   return out.sort((a, b) => a.deliverDay - b.deliverDay);
 }
@@ -130,9 +150,9 @@ export const unread = g => Object.values(g.threads).flat().filter(m => m.deliver
 
 /** Quest log rows for the UI. */
 export function questLog(g) {
-  return QUESTS.map(q => {
-    const early = q.after.filter(a => g.quests[a] !== 'done');
-    return { ...q, status: g.quests[q.id], ready: !early.length, waitingOn: early.map(a => questById[a].title), feeNow: q.fee === 'homeCost' || q.fee === 'homePermit' ? feeFor(g, q) : q.fee };
+  return QUESTS.filter(q => applies(g, q)).map(q => {
+    const early = q.after.filter(a => g.quests[a] !== 'done' && applies(g, questById[a]));
+    return { ...q, status: g.quests[q.id], ready: !early.length, waitingOn: early.map(a => questById[a].title), feeNow: typeof q.fee === 'string' ? feeFor(g, q) : q.fee };
   });
 }
 export { fmt$ };

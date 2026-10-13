@@ -7,6 +7,8 @@ export function factsOf(v) {
     case 'welcome': return ['Explain the goal: a legal, livable home on the RA-5 parcel.', 'Suggest starting by asking what can be built, and drawing a site plan.'];
     case 'accepted': return [`Request "${v.title}" is accepted.`, `Fee charged: ${$(v.fee)}${v.est ? ' (estimate)' : ''}.`, ...(v.extra || []), `Result: ${v.gives.join(', ')}.`, `Basis: ${v.cite}.`];
     case 'have-loan': return [`The player already has a construction loan in progress with ${v.lender}; you cannot open a second one. Wish them well.`];
+    case 'no-better': return [`Cannot improve on the current rate of ${v.rate}% (the competing offer is ${v.comp}%).`, 'Explain that we are already at or below the competitor, or at our floor. Suggest buying a discount point instead.'];
+    case 'not-needed': return [`"${v.title}" is not needed for this parcel.`];
     case 'declined': return [`Declined: ${v.reason}.`, 'Suggest another lender or improving credit.'];
     case 'needs-info': return [`Cannot process "${v.title}" yet.`, `Missing: ${v.missing.join('; ')}.`, 'Resubmit with these attached.'];
     case 'too-early': return [`"${v.title}" cannot start yet.`, `Must be completed first: ${v.first.join('; ')}.`];
@@ -26,6 +28,8 @@ export function scriptedReply(npc, v, m) {
     case 'welcome': return `Welcome. You own 4.8 vacant acres zoned RA-5 in unincorporated King County.\n\nTo live there legally you need water, septic, power, a building permit and a final inspection. Most people start by asking us what can be built, then drawing a site plan: place your home, well and drainfield on the map.\n\nEvery request in this game is an email. Agencies reply on the clock; use ⏭ to wait for mail.${sign}`;
     case 'accepted': return `Thank you, your request for "${v.title}" is approved.\n\nFee: ${$(v.fee)}${v.est ? ' (estimate)' : ''}\n${(v.extra || []).map(x => x + '\n').join('')}You now have: ${v.gives.join(', ')}\n\nReference: ${v.cite}${sign}`;
     case 'have-loan': return `It looks like you're already working with ${v.lender} on a construction loan, so we can't open a second one. Good luck with the build!${sign}`;
+    case 'no-better': return `Thanks for sending the competing Loan Estimate. Our rate is ${v.rate}% and theirs is ${v.comp}%, so we can't go lower right now. If you want a lower rate, you can buy a discount point.${sign}`;
+    case 'not-needed': return `Good news: "${v.title}" isn't needed for your parcel.${sign}`;
     case 'declined': return `We're unable to pre-qualify you: ${v.reason}. Another lender may have different criteria.${sign}`;
     case 'needs-info': return `We can't process "${v.title}" yet. Please send:\n${list(v.missing)}\n\nNo fee has been charged.${sign}`;
     case 'too-early': return `"${v.title}" can't start until these are complete:\n${list(v.first)}${sign}`;

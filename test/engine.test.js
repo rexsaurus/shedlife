@@ -51,8 +51,8 @@ test('loan math: prequal, LTV cap, payment', async () => {
   assert.ok(Math.abs(monthlyPayment(100000, 0.06) - 599.55) < 0.1);
   g.player.credit = 700; send(g, { npc: 'bank-ridge', questId: 'bank-ridge-prequal' }); assert.equal(g.threads['bank-ridge'].at(-1).verdict.kind, 'declined');
 });
-test('full playthrough reaches occupancy within budget and deadline', () => {
-  const g = withPlan(newGame(SCENARIO), goodPlan());
+for (const stream of [false, true]) test(`full playthrough reaches occupancy (stream on parcel: ${stream})`, () => {
+  const g = withPlan(newGame(SCENARIO), goodPlan()); g.site = { stream, trees: 50 };
   let guard = 0;
   while (!g.outcome && guard++ < 200) {
     for (const q of questLog(g)) if (q.status === 'open' && q.ready) {
@@ -63,7 +63,10 @@ test('full playthrough reaches occupancy within budget and deadline', () => {
   }
   assert.ok(g.outcome?.won, JSON.stringify({ outcome: g.outcome, quests: g.quests, budget: g.budget }));
   assert.ok(g.budget >= 0); assert.ok(g.outcome.day <= SCENARIO.deadlineDay, `day ${g.outcome.day}`);
-  assert.ok(QUESTS.filter(q => !q.loan).every(q => g.quests[q.id] === 'done'));
+  assert.ok(QUESTS.filter(q => !q.loan && (!q.when || q.when(g))).every(q => g.quests[q.id] === 'done'), JSON.stringify(g.quests));
   assert.ok(g.loan && g.loan.amount > 0, 'construction loan funded'); assert.ok(g.loan.interest > 0, 'interest charged');
   assert.equal(QUESTS.filter(q => q.loan === 'close' && g.quests[q.id] === 'done').length, 1, 'exactly one lender funds');
+  assert.ok(g.docs.includes('homeowners') && g.docs.includes('site-cleared'));
+  assert.equal(g.quests.hpa === 'done', stream);
+  assert.ok(g.rates['bank-ridge'] < 0.0775, 'negotiation/points lowered a rate');
 });

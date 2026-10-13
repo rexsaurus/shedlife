@@ -81,6 +81,21 @@ export const AGENCIES = {
     url: 'https://www.rd.usda.gov/programs-services/single-family-housing-programs', channel: 'Eligibility checks online; applications through RD offices or approved lenders',
     persona: 'Federal program staff. Friendly, careful about eligibility, points people to the online eligibility tool.', avatar: '🌾',
   },
+  surveyor: { name: 'Tolt Line Survey & Stake', org: 'Licensed land surveyor (fictional)', real: false, email: 'crew@toltline.example',
+    persona: 'Surveyor. Quietly obsessed with pins, monuments and the difference between a fence and a property line.', avatar: '📐' },
+  excavator: { name: 'Raging River Excavation', org: 'Clearing, grading, driveways (fictional)', real: false, email: 'dispatch@ragingriver.example',
+    persona: 'Excavator owner-operator. Plain-spoken, weather-obsessed, will not move dirt without the permit and erosion control in place.', avatar: '🚜' },
+  biologist: { name: 'Salal & Stream Ecological', org: 'Wetland and stream biologists (fictional)', real: false, email: 'reports@salalstream.example',
+    persona: 'Field biologist. Enthusiastic about salmon and amphibians, careful and exact about buffers.', avatar: '🐟' },
+  wdfw: { name: 'WA Dept. of Fish & Wildlife', org: 'Habitat Program — Hydraulic Project Approval (HPA)', real: true, email: null,
+    url: 'https://wdfw.wa.gov/licenses/environmental/hpa', channel: 'HPA applications through WDFW\'s online permitting system (APPS)',
+    persona: 'Habitat biologist. Protective of fish, practical with homeowners, explains conditions clearly.', avatar: '🎣' },
+  insurer: { name: 'Cascadia Mutual Insurance', org: 'Builder\'s risk + homeowners (fictional)', real: false, email: 'agents@cascadiamutual.example',
+    persona: 'Insurance agent. Friendly, asks about wildfire and wood stoves, explains deductibles with analogies.', avatar: '🛡️' },
+  titleco: { name: 'Evergreen Title & Escrow', org: 'Title insurance and escrow (fictional)', real: false, email: 'orders@evergreentitle.example',
+    persona: 'Escrow officer. Meticulous, cheerful about easements, never rushes a closing.', avatar: '📜' },
+  oic: { name: 'WA Office of the Insurance Commissioner', org: 'Consumer advocacy', real: true, email: null, url: 'https://www.insurance.wa.gov/',
+    channel: 'Consumer advocacy hotline and online help', persona: 'State consumer advocate. Neutral, explains coverage types and how to file a complaint.', avatar: '⚖️' },
   septicer: {
     name: 'Tolt River Septic Install', org: 'Licensed septic installer (fictional)', real: false,
     email: 'jobs@toltriver.example', persona: 'Installer. Practical, will not dig before an install permit is issued.',
@@ -115,6 +130,10 @@ export const DOCS = {
   'prequal-bank-cu': 'Pre-qualification letter (Evergreen Valley CU)', 'prequal-bank-ridge': 'Pre-qualification letter (Puget Ridge Bank)',
   'loan-approval-bank-cu': 'Loan approval + appraisal (Evergreen Valley CU)', 'loan-approval-bank-ridge': 'Loan approval + appraisal (Puget Ridge Bank)',
   'loan-funded': 'Construction loan funded',
+  'loan-estimate-bank-cu': 'Loan Estimate (Evergreen Valley CU)', 'loan-estimate-bank-ridge': 'Loan Estimate (Puget Ridge Bank)',
+  'survey': 'Boundary + topo survey (stakes set)', 'buffer-plan': 'Critical area report + buffer plan', 'hpa': 'Hydraulic Project Approval (WDFW)',
+  'grading-permit': 'Clearing & grading permit', 'site-cleared': 'Site cleared, graded + driveway in',
+  'builders-risk': 'Builder\'s risk insurance policy', 'title-policy': 'Lender\'s title insurance policy', 'homeowners': 'Homeowners insurance policy',
 };
 
 // ---- Quest graph. Each quest is one email ask to one NPC.
@@ -161,6 +180,30 @@ export const QUESTS = [
     needs: ['home-set', 'septic-installed', 'electrical-permit'], after: ['set-home', 'septic-install', 'electrical'], fee: 0, days: 7, gives: ['occupancy'], cite: 'King County final inspection' },
 ];
 
+// ---- Site work + insurance. `when` makes a quest apply only to some parcels (the CAD reveals what's on yours).
+const stream = g => !!g.site?.stream;
+QUESTS.push(
+  { id: 'survey', npc: 'surveyor', section: 'Site work', title: 'Survey + stake the lot', ask: 'Run a boundary and topographic survey and stake the house, well and drainfield.',
+    needs: [], after: ['zoning'], fee: 3500, est: true, days: 14, gives: ['survey'], cite: 'Licensed survey to prove setbacks and grades (game estimate; RCW 18.43 licenses surveyors)' },
+  { id: 'biologist', npc: 'biologist', section: 'Site work', when: stream, title: 'Stream study + buffer plan', ask: 'Delineate the stream, set the buffer and write the critical area report.',
+    needs: ['cad'], after: ['cad'], fee: 4500, est: true, days: 21, gives: ['buffer-plan'], cite: 'KCC 21A.24 stream buffers (rural Type N: 65 ft + 15 ft building setback); consultant cost is a game estimate' },
+  { id: 'hpa', npc: 'wdfw', section: 'Site work', when: stream, title: 'Hydraulic Project Approval', ask: 'Apply for an HPA for the driveway culvert crossing the stream.',
+    needs: ['site-plan', 'buffer-plan'], after: ['biologist'], fee: 0, days: 45, gives: ['hpa'], cite: 'RCW 77.55.021 (HPA for work in state waters; 45-day decision; no application fee listed by WDFW)' },
+  { id: 'grading', npc: 'permitting', section: 'Site work', title: 'Clearing & grading permit', ask: 'Apply for the clearing and grading permit for the house pad and driveway.',
+    needs: ['site-plan', 'cad', 'survey'], after: ['cad', 'survey', 'biologist'], fee: 3000, est: true, days: 30, gives: ['grading-permit'],
+    cite: 'King County clearing/grading: RA zones need a clearing permit over 7,000 sq ft cleared or 5,000 board feet of timber; grading over 100 cu yd; drainage review at 2,000 sq ft impervious or 7,000 sq ft disturbed (fee is a game estimate)' },
+  { id: 'clear', npc: 'excavator', section: 'Site work', title: 'Clear, grade + driveway', ask: 'Clear the pad, install erosion control, grade, and cut the gravel driveway.',
+    needs: ['grading-permit'], after: ['grading', 'hpa'], fee: 18000, est: true, days: 10, gives: ['site-cleared'], cite: 'Site work (game estimate); erosion control per KCC 16.82' },
+  { id: 'title', npc: 'titleco', section: 'Insurance', title: 'Lender\'s title insurance', ask: 'Open title and order a lender\'s title insurance policy for the construction loan.',
+    needs: [], after: ['zoning'], fee: 1800, est: true, days: 7, gives: ['title-policy'], cite: 'Lender\'s title policy is common for construction loans (UNVERIFIED as a universal requirement; game estimate)' },
+  { id: 'builders-risk', npc: 'insurer', section: 'Insurance', title: 'Builder\'s risk insurance', ask: 'Bind a builder\'s risk policy for the construction period.',
+    needs: ['building-permit'], after: ['permit'], fee: 2200, est: true, days: 2, gives: ['builders-risk'], cite: 'Builder\'s risk is required during the construction phase of construction-to-permanent loans (lender guides; game estimate)' },
+  { id: 'homeowners', npc: 'insurer', section: 'Insurance', title: 'Homeowners insurance', ask: 'Bind a homeowners policy now that the home is set.',
+    needs: [], after: ['set-home'], fee: 1600, est: true, days: 1, gives: ['homeowners'], cite: 'Required by the lender at completion; you need it to move in (game estimate, first-year premium)' },
+);
+for (const [id, extra] of [['septic-install', ['clear']], ['set-home', ['clear', 'builders-risk']], ['permit', ['grading']]]) questById0(id).after.push(...extra);
+function questById0(id) { return QUESTS.find(q => q.id === id); }
+
 // ---- Financing subgame. Lenders are fictional; terms are game estimates of typical 2026 construction-to-permanent loans.
 export const LENDERS = {
   'bank-cu': { rate: 0.0725, appraisalFee: 700, appraisalDays: 21, closingPct: 0.02, minCredit: 680, maxLtv: 0.8 },
@@ -169,14 +212,21 @@ export const LENDERS = {
 export const SITE_BUDGET = 60000; // septic + well + power + permits the loan also covers (game estimate)
 for (const b of Object.keys(LENDERS)) QUESTS.push(
   { id: `${b}-prequal`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Get pre-qualified', ask: 'Ask for a construction-to-permanent loan pre-qualification.',
-    needs: [], after: [], fee: 0, days: 2, gives: [`prequal-${b}`], loan: 'prequal', cite: 'Lender underwriting: debt-to-income ≤43%, credit score (game simplification)' },
+    needs: [], after: [], fee: 0, days: 2, gives: [`prequal-${b}`, `loan-estimate-${b}`], loan: 'prequal', cite: 'Lender underwriting: debt-to-income ≤43%, credit score (game simplification)' },
   { id: `${b}-apply`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Apply + appraisal', ask: 'Apply for the construction loan and order the as-completed appraisal.',
     needs: ['site-plan', `prequal-${b}`, 'home-plans'], after: [`${b}-prequal`, 'plans'], fee: LENDERS[b].appraisalFee, est: true, days: LENDERS[b].appraisalDays,
     gives: [`loan-approval-${b}`], loan: 'apply', requiresHome: true, cite: 'Construction lenders require plans, a builder bid and an as-completed appraisal (game simplification)' },
   { id: `${b}-close`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Close + fund the loan', ask: 'Close the construction loan now that the building permit is issued.',
-    needs: [`loan-approval-${b}`, 'building-permit'], after: [`${b}-apply`, 'permit'], fee: 'loanClosing', est: true, days: 5,
+    needs: [`loan-approval-${b}`, 'building-permit', 'builders-risk', 'title-policy'], after: [`${b}-apply`, 'permit', 'builders-risk', 'title'], fee: 'loanClosing', est: true, days: 5,
     gives: ['loan-funded'], loan: 'close', cite: 'Lenders close construction loans after the building permit issues; interest-only during construction (game simplification)' },
 );
+for (const b of Object.keys(LENDERS)) { const other = Object.keys(LENDERS).find(o => o !== b); QUESTS.push(
+  { id: `${b}-negotiate`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Negotiate the rate', ask: `Attach the competing Loan Estimate from ${other === 'bank-cu' ? 'Evergreen Valley CU' : 'Puget Ridge Bank'} and ask for a better rate.`,
+    needs: [`loan-estimate-${other}`], after: [`${b}-prequal`, `${other}-prequal`], fee: 0, days: 3, gives: [], loan: 'negotiate', cite: 'Shopping lenders with Loan Estimates (CFPB TRID); lenders may match within their floor (game rule)' },
+  { id: `${b}-points`, npc: b, section: 'Financing', exclusive: 'loan', title: 'Buy down the rate (1 point)', ask: 'Pay one discount point (1% of the loan) to lower the rate.',
+    needs: [], after: [`${b}-prequal`, 'plans'], fee: 'points', days: 2, gives: [], loan: 'points', requiresHome: true, cite: 'Discount points: 1% of the loan for ~0.25% lower rate (game rule; real pricing varies)' },
+); }
+export const RATE_FLOOR = 0.005; // a lender won't go more than 0.50% under its posted rate
 
 export const questById = Object.fromEntries(QUESTS.map(q => [q.id, q]));
 

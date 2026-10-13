@@ -1,5 +1,7 @@
 # ShedLife — Claude Code guide
 
+**This repo is public.** Never commit secrets, API keys, tokens, `.env`, or personal data. If you see one staged, stop and remove it.
+
 ShedLife is a **training simulator** for building a home on real Washington land — real parcels, the real permit path,
 real vendors, real loan mechanics — on an accelerated clock, made just fun enough that learning it doesn't hurt.
 The isometric map is the site plan; **the inbox is the game**: every move is an email to a real public agency
@@ -54,3 +56,32 @@ user-scoped `sk-ant-usr` keys), `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`),
 ## Skills in this repo (`.claude/skills/`)
 `add-county` · `add-agency-npc` · `add-official-body` · `add-vendor-product` · `add-quest` · `verify-regulation` · `refresh-data` · `npc-voice` · `playtest` · `draft-real-email`
 Subagent: `regs-researcher` (`.claude/agents/`). MCP: Apify via `.mcp.json` (needs `APIFY_TOKEN`).
+
+## Project conventions (from the original guide; still apply)
+1. **Original art only.** Procedural or hand-made low-poly. No third-party models, textures, or vendor 3D assets unless explicitly licensed and noted.
+2. **No scraping against terms.** Official APIs, open data, licensed feeds, or user-supplied files only. Check robots.txt and ToS. User-pasted listing URLs are shown as links, never fetched and parsed.
+3. **No owner PII.** Never request or store owner names or mailing addresses from parcel layers. No "look up who owns this" feature.
+4. **Human approval before any real purchase, hire, order, payment, message to a vendor/contractor, or government filing.** Agents may prepare; only an explicit, per-action human approval executes. No automated submissions to permit portals. No standing approvals for spend.
+5. **Every number and rule is sourced.** Prices carry vendor, URL and date. Rules carry citation URL, effective date and `last_verified`. Ambiguous rules return "ask the planner", not a guess.
+6. **Secrets stay out of git and out of the browser.** `.env` is gitignored, and keys are read only in `server/`.
+7. **Tests:** `npm test` must pass. Network calls in tests are mocked through `fetchImpl`. Add a test for every new pure function and adapter.
+8. **Style:** ES modules, small pure functions, no framework on the front end beyond Three.js. Keep dependencies minimal and ask before adding heavy ones.
+9. ShedLife is not a contractor, broker, architect, engineer, or lawyer. UI copy must not claim authoritative determinations.
+
+
+## California data adapters (original P0, still in `server/`)
+| Adapter | Endpoint | Auth | Limits / terms |
+|---|---|---|---|
+| San Mateo parcels (`server/parcel.mjs`) | `https://gis.smcgov.org/maps/rest/services/Common/ACTIVE_PARCELS_APN/FeatureServer/0/query` | none | Public ArcGIS REST. Request only `APN,PUCDESC,SITUS_CITY,UNINC`. **No owner fields.** Be gentle; prefer the bundled snapshot. |
+| Santa Clara parcels | `https://services8.arcgis.com/fpjs8A5Vtkshblnd/arcgis/rest/services/Santa_Clara_County_Parcels/FeatureServer/0/query` | none | Public. Request only `apn,situs_city`. |
+| USGS 3DEP terrain | `https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/getSamples` (POST multipoint, ≤200 points per batch) | none | Public domain. Batch requests; don't loop per point. |
+| RentCast land listings (`server/listings.mjs`) | `GET https://api.rentcast.io/v1/listings/sale?propertyType=Land&status=Active&latitude&longitude&radius&limit` with `X-Api-Key` | `RENTCAST_API_KEY` in `.env`, **server-side only** | Free Developer plan is about 50 requests/month. Each refresh uses 4 calls (4 Bay Area circles), which is why the 6 h cache exists. Display with attribution; no resale of raw data. |
+| County tax-defaulted sales (`server/taxsale.mjs`) | Official county list, downloaded by a human and imported as CSV | none | Public record. Bid4Assets and county sites block automation, and mytaxsale robots.txt disallows `/auction/`. **Never scrape them**; import the county's file. |
+| Planned (P2–P3) | FEMA NFHL, CAL FIRE FHSZ, CGS, Coastal Commission, NWI, SMC zoning GIS, CSLB data portal, Thumbtack Partner API, Angi, Yelp Fusion, PG&E, MWSD | varies | See docs/data-sources.md. Thumbtack and Angi need partner approval first. |
+| Not allowed | Zillow / Bridge, Redfin listings, LandWatch/Land.com, LoopNet, Crexi, Realtor.com | n/a | No public API, and their terms forbid scraping. Don't add adapters for them. Redfin Data Center market-level downloads are OK. |
+
+New adapters: one module per source, return `{ data, source_url, fetched_at, terms }`, keys only server-side, cache to fit quotas, inject `fetchImpl` so tests never hit the network, and add the source to docs/data-sources.md.
+
+
+## History
+P0 began on a San Mateo County, CA parcel (Montara). On 2026-10-12 the game pivoted to Washington State (King County RA-5 parcel, statewide WaTech parcels) as an inbox-driven training simulator. The original California P1–P4 backlog lives in [docs/ROADMAP.md](docs/ROADMAP.md) and [docs/SPEC.md](docs/SPEC.md); treat it as reference, not the current plan.

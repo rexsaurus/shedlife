@@ -1,5 +1,7 @@
 # ShedLife
 
+![ShedLife icon](public/icon-512.png)
+
 **A training simulator for building a home on real Washington land — on an accelerated clock, just fun enough that it doesn't hurt.**
 
 ![ShedLife stack](docs/shedlife-stack.png)
@@ -7,6 +9,10 @@
 **Permit quest: build a home on a real piece of Washington.** You own a real vacant parcel in rural King County (PIN 8847400030, RA-5, 4.8 acres, real USGS terrain). To live there you need water, septic, power, a building permit and a final inspection — and **every move is an email**. Real agencies (King County Permitting, Public Health, Ecology, L&I, PSE) and fictional contractors answer on the game clock: approved, needs info, not yet, corrections. Claude writes every reply in character; a deterministic engine built on real King County rules and 2026 fees decides what they say.
 
 ![ShedLife](docs/screenshot.png)
+
+## Docs
+- [docs/SPEC.md](docs/SPEC.md): full product spec · [docs/ROADMAP.md](docs/ROADMAP.md): milestones P0–P4
+- [CLAUDE.md](CLAUDE.md): guide for coding agents · [docs/wa-king-county.md](docs/wa-king-county.md): Washington research and sources · [docs/data-sources.md](docs/data-sources.md): data sources and terms
 
 ## What's in it
 - **Pick any parcel in Washington** on a statewide map (WaTech parcels, ~3M; vacant = no building value). King County lots get real zoning from county GIS.

@@ -2,6 +2,7 @@
 import { allListings } from './listings.mjs';
 import { loadParcel } from './parcel.mjs';
 import { voiceReply, MODEL } from './npc.mjs';
+import { parcelsInBbox, loadWaParcel } from './wa-parcels.mjs';
 const readJson = req => new Promise((ok, no) => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { ok(JSON.parse(b || '{}')); } catch (e) { no(e); } }); });
 
 let cache = { at: 0, data: null };
@@ -17,6 +18,8 @@ function mount(server) {
       }
       if (u.pathname === '/api/npc' && req.method === 'POST') return json(res, 200, await voiceReply(await readJson(req)));
       if (u.pathname === '/api/status') return json(res, 200, { claude: !!process.env.ANTHROPIC_API_KEY, model: MODEL, rentcast: !!process.env.RENTCAST_API_KEY, apify: !!process.env.APIFY_TOKEN });
+      if (u.pathname === '/api/wa/parcels') return json(res, 200, await parcelsInBbox((u.searchParams.get('bbox') || '').split(',').map(Number), { vacant: u.searchParams.get('vacant') === '1' }));
+      if (u.pathname === '/api/wa/parcel') { const d = await loadWaParcel(u.searchParams.get('id') || ''); return d ? json(res, 200, d) : json(res, 404, { error: 'Parcel not found' }); }
       if (u.pathname === '/api/parcel') {
         const p = Object.fromEntries(u.searchParams);
         const d = await loadParcel({ county: p.county, apn: p.apn, lat: p.lat && +p.lat, lon: p.lon && +p.lon });

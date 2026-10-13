@@ -4,7 +4,7 @@ import { bboxOf } from '../src/geo.js';
 export const COUNTIES = {
   'king': { name: 'King', state: 'WA', url: 'https://gismaps.kingcounty.gov/arcgis/rest/services/Property/KingCo_PropertyInfo/MapServer/2/query',
     apn: 'PIN', fields: 'PIN,KCA_ZONING,KCA_ACRES,PREUSE_DESC,ADDR_FULL,CTYNAME',
-    norm: p => ({ apn: p.PIN, use: (p.PREUSE_DESC || '').trim(), city: p.CTYNAME || null, jurisdiction: p.CTYNAME ? 'City' : 'Unincorporated King County', zoning: p.KCA_ZONING, acres: p.KCA_ACRES, address: p.ADDR_FULL, state: 'WA' }) },
+    norm: p => ({ apn: p.PIN, use: (p.PREUSE_DESC || '').trim(), city: p.CTYNAME || null, jurisdiction: p.CTYNAME ? `City of ${p.CTYNAME.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase())}` : 'Unincorporated King County', zoning: p.KCA_ZONING, acres: p.KCA_ACRES, address: p.ADDR_FULL, state: 'WA' }) },
   'san-mateo': { name: 'San Mateo', url: 'https://gis.smcgov.org/maps/rest/services/Common/ACTIVE_PARCELS_APN/FeatureServer/0/query',
     apn: 'APN', fields: 'APN,PUCDESC,SITUS_CITY,UNINC', norm: p => ({ apn: p.APN, use: p.PUCDESC, city: p.SITUS_CITY, jurisdiction: p.UNINC }) },
   'santa-clara': { name: 'Santa Clara', url: 'https://services8.arcgis.com/fpjs8A5Vtkshblnd/arcgis/rest/services/Santa_Clara_County_Parcels/FeatureServer/0/query',

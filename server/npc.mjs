@@ -3,11 +3,35 @@
 import { NPCS } from '../src/scenarios/king-county.js';
 import { factsOf } from '../src/letters.js';
 import { KNOWLEDGE } from '../src/scenarios/king-county-knowledge.js';
+import { OFFICIAL_KNOWLEDGE, bodyById } from '../src/officials.js';
 
 export const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
 
-export function buildPrompt({ npc, verdict, thread = [], parcel = {}, day = 0 }) {
-  const n = NPCS[npc];
+export function buildPrompt(args) {
+  const n = NPCS[args.npc];
+  return n.official ? officialPrompt(n, args) : agencyPrompt(n, args);
+}
+
+function history(n, thread) {
+  return thread.slice(-6).map(m => `${m.from === 'me' ? 'PLAYER' : n.name.toUpperCase()} (day ${m.day}): ${String(m.body || '').slice(0, 900)}`).join('\n\n');
+}
+
+function officialPrompt(n, { verdict, thread = [], parcel = {}, day = 0 }) {
+  const b = bodyById[n.body];
+  const system = [
+    `You are role-playing ${n.name}, a FICTIONAL ${n.title.toLowerCase()} (${n.seat}) on the real ${b.name}, in ShedLife — a game about getting a home permitted on a vacant parcel in Washington State.`,
+    `Persona: ${n.persona}`,
+    `About the real body: ${b.role}`,
+    'You are an invented character. Never claim to be, name, quote or describe any real current or former officeholder, and never attribute positions to real people or parties. No campaigning or partisan talk; your views are your fictional character\'s own and you respect people who disagree.',
+    'You may explain real public processes in general terms using only the knowledge below. Never invent ordinances, votes, dates, fees, or outcomes. You cannot approve, deny, expedite or influence an individual permit (appearance-of-fairness rules); point the player to staff, public comment, or a hearing instead.',
+    'Write ONLY your reply, 40–120 words, plain text, conversational, in your style. Sign with your name.',
+    `What you know:\n${OFFICIAL_KNOWLEDGE.map(([f, src]) => `- ${f} [${src}]`).join('\n')}`,
+  ].join('\n');
+  const user = `Player's parcel: ${parcel.county || 'King'} County, ${parcel.zoning || 'zoning unknown'}, ${parcel.jurisdiction || ''}. Game day ${day}.\n\nConversation so far:\n${history(n, thread) || '(none)'}\n\nFACTS for your reply:\n- ${factsOf(verdict).join('\n- ')}`;
+  return { system, user };
+}
+
+function agencyPrompt(n, { npc, verdict, thread = [], parcel = {}, day = 0 }) {
   const system = [
     `You are role-playing "${n.name}" (${n.org}) in ShedLife, a game about getting a real home permitted on a real vacant parcel in ${parcel.county || 'King'} County, Washington.`,
     `Persona: ${n.persona}`,
@@ -17,8 +41,7 @@ export function buildPrompt({ npc, verdict, thread = [], parcel = {}, day = 0 })
     `What you know (use only if relevant; paraphrase; mention the source for fees or rules):\n${(KNOWLEDGE[npc] || []).map(([f, src]) => `- ${f} [${src}]`).join('\n')}`,
     `Sign off as ${n.real ? n.name : 'a named person at ' + n.name}.`,
   ].join('\n');
-  const history = thread.slice(-4).map(m => `${m.from === 'me' ? 'PLAYER' : n.name.toUpperCase()} (day ${m.day}): ${String(m.body || '').slice(0, 900)}`).join('\n\n');
-  const user = `Parcel: PIN ${parcel.apn || '?'}, zoned ${parcel.zoning || 'RA-5'}, ${parcel.acres ? parcel.acres.toFixed(1) + ' acres' : ''}, ${parcel.jurisdiction || 'unincorporated King County'}. Game day ${day}.\n\nRecent thread:\n${history || '(none)'}\n\nFACTS for your reply:\n- ${factsOf(verdict).join('\n- ')}`;
+  const user = `Parcel: PIN ${parcel.apn || '?'}, zoned ${parcel.zoning || 'RA-5'}, ${parcel.acres ? parcel.acres.toFixed(1) + ' acres' : ''}, ${parcel.jurisdiction || 'unincorporated King County'}. Game day ${day}.\n\nRecent thread:\n${history(n, thread) || '(none)'}\n\nFACTS for your reply:\n- ${factsOf(verdict).join('\n- ')}`;
   return { system, user };
 }
 

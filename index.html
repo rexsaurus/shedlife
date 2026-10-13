@@ -51,6 +51,22 @@
  #modal h1{margin:0 0 8px;font-size:24px} #modal p{margin:6px 0}
  #parcel{font-size:12px;color:var(--mute);margin-bottom:10px}
  .claude{font-size:10px;color:var(--mute)}
+ canvas.pt{width:30px;height:30px;image-rendering:pixelated;border-radius:5px;flex:none;box-shadow:0 0 0 1px #0003}
+ canvas.ptBig{width:84px;height:84px;image-rendering:pixelated;border-radius:8px;box-shadow:0 0 0 2px #1f2a24;flex:none}
+ #threadHead{display:flex;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:#f6f2e8;align-items:center;min-height:100px}
+ .bodyhead{padding:5px 12px;font-size:11px;font-weight:700;color:#fff;letter-spacing:.03em;position:sticky;top:0;z-index:1}
+ #inbox header button{padding:3px 7px;font-size:12px}
+ #wamap{position:fixed;inset:0;z-index:8;display:none;background:#dfe7ef} #wamapCanvas{position:absolute;inset:0}
+ #wapanel{position:absolute;top:10px;left:56px;width:330px;padding:12px;z-index:1100;max-height:calc(100% - 20px);overflow:auto}
+ #wapanel button{font-size:12px;padding:3px 7px}
+ #shop{position:fixed;inset:0;background:#0007;display:none;align-items:center;justify-content:center;z-index:9}
+ #shop .card{background:var(--paper);border-radius:12px;padding:16px 18px;width:min(1080px,94vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 10px 40px #0006}
+ #shopGrid{overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:10px;margin-top:10px}
+ .item{display:flex;gap:10px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+ .item .sw{width:64px;height:64px;border-radius:8px;flex:none;display:flex;align-items:center;justify-content:center;font-size:26px;image-rendering:pixelated}
+ .item .price{font-weight:800;font-size:15px;margin-top:2px} .item .act{margin-top:6px}
+ .badges{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px} .bdg{font-size:10px;padding:1px 6px;border-radius:9px;background:#e9e4d8}
+ .bdg.ok{background:#d8eadf;color:#1b4332} .bdg.bad{background:#f6d5d2;color:#8a1c14} .bdg.warn{background:#f5e6c8;color:#7a5410}
 </style></head>
 <body>
 <div id="top" class="panel">
@@ -59,11 +75,13 @@
  <div class="stat"><small>Budget</small><b id="sBudget">$0</b></div>
  <div class="stat"><small>Permits</small><b id="sProgress">0/0</b></div>
  <div class="stat"><small>NPC voice</small><b id="sVoice" style="font-size:12px">…</b></div>
+ <button id="topMap">🗺 Washington</button><button id="topShop">🛒 Shop</button>
 </div>
 
 <div id="inbox" class="panel">
- <header><h2 style="margin:0">Inbox <span id="unread"></span></h2><button id="newMail" title="Write to any agency or contractor">✉ New</button></header>
+ <header><h2 style="margin:0">Inbox <span id="unread"></span></h2><span><button data-tab="agencies" class="on">📨 Agencies</button> <button data-tab="officials">🏛️ Officials</button></span></header>
  <div id="threads"></div>
+ <div id="threadHead"></div>
  <div id="thread"></div>
  <div id="compose">
   <div id="composeRow"><b id="cTo">To: —</b><a id="realMail" target="_blank" rel="noopener"></a></div>
@@ -91,6 +109,21 @@
  <button id="skip" title="Jump to the next reply">⏭ Next mail</button>
 </div>
 <div id="tip"></div>
+<div id="wamap"><div id="wamapCanvas"></div>
+ <div id="wapanel" class="panel">
+  <h2>Washington · pick your land</h2>
+  <form id="waSearch" style="display:flex;gap:4px"><input id="waQuery" placeholder="Town or address in WA" style="flex:1;font:inherit;padding:4px;border:1px solid #cfc8b8;border-radius:6px"><button>Go</button></form>
+  <label style="display:block;margin:6px 0"><input type="checkbox" id="waVacant" checked> Vacant only (no building value)</label>
+  <div id="waStatus" class="claude"></div>
+  <div id="waJumps" style="display:flex;flex-wrap:wrap;gap:4px;margin:6px 0"></div>
+  <div id="waCard" style="border-top:1px solid var(--line);padding-top:8px;margin-top:6px"></div>
+  <p style="text-align:right;margin:8px 0 0"><button id="waClose">Back to my lot</button></p>
+ </div></div>
+<div id="shop"><div class="card">
+ <div style="display:flex;justify-content:space-between;align-items:center"><h1 style="margin:0;font-size:20px">🛒 Washington homes & sheds</h1><button id="shopClose">✕</button></div>
+ <p class="claude" style="margin:4px 0 8px">Real products from Washington vendors (checked Oct 12, 2026; prices change, confirm with the vendor). Quote-only items use a game estimate.</p>
+ <div id="shopTabs" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+ <div id="shopGrid"></div></div></div>
 <div id="toast"></div>
 <div id="modal"><div class="card" id="modalCard"></div></div>
 <script type="module" src="/src/main.js"></script>

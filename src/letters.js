@@ -12,6 +12,7 @@ export function factsOf(v) {
     case 'cant-pay': return [`Fee for "${v.title}" is ${$(v.fee)}; the account only has ${$(v.budget)}.`];
     case 'duplicate': return [`"${v.title}" is already complete.`];
     case 'pending': return [`"${v.title}" is already under review; no action needed.`];
+    case 'chat': return ['This is a conversation with an official, not a permit decision. Respond to what the player just said, in character, at a general level.', 'You cannot approve, deny, speed up or influence any individual permit; say so kindly if asked.'];
     case 'answer': return ['Answer the question from general knowledge of this agency\'s role, briefly. Do not grant approvals or quote fees not listed in the facts.'];
     default: return [];
   }
@@ -28,6 +29,9 @@ export function scriptedReply(npc, v, m) {
     case 'cant-pay': return `The fee for "${v.title}" is ${$(v.fee)}. Your available funds are ${$(v.budget)}.${sign}`;
     case 'duplicate': return `Our records show "${v.title}" is already complete.${sign}`;
     case 'pending': return `"${v.title}" is already in review. We'll write when it's done.${sign}`;
+    case 'chat': return npc?.title === 'Hearing Examiner'
+      ? `Thank you for writing. I can't discuss the merits of a case outside a hearing, but I'm happy to explain how appeals work: you file within the deadline in the decision, the County and you present evidence at a hearing, and I issue a written decision.${sign}`
+      : `Thanks for reaching out. Permit decisions are made by staff, not by the ${npc?.org?.split(' · ')[0] || 'council'}, so I can't weigh in on yours. What I can do is listen — I spend most of my time on ${npc?.priorities?.join(' and ') || 'land use'}. If the code is getting in the way of a home like yours, testify at a hearing or send written comment; that's on the record and it matters.${sign}`;
     case 'answer': return `Thanks for your question. Our general guidance is on our website${npc?.url ? `: ${npc.url}` : ''}. For anything parcel-specific, please submit a request.${sign}`;
     default: return '';
   }

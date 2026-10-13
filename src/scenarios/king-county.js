@@ -9,12 +9,14 @@ export const SCENARIO = {
   state: 'WA', county: 'King',
   pitch: 'You own 4.8 vacant acres zoned RA-5. Get a legal, livable home on it: water, septic, power, permits, final inspection.',
   startDate: Date.UTC(2026, 9, 12, 8, 0),
-  budget: 225000,
+  budget: 350000,
   deadlineDay: 240,
 };
 
 // ---- NPCs: real public bodies (general intake only) + fictional contractors
-export const NPCS = {
+import { OFFICIALS } from '../officials.js';
+
+export const AGENCIES = {
   permitting: {
     name: 'King County Permitting', org: 'Dept. of Local Services, Permitting Division', real: true,
     email: 'PermitQuestions@kingcounty.gov', phone: '206-296-6600', url: 'https://kingcounty.gov/en/dept/local-services/buildings-property/permits',
@@ -70,6 +72,9 @@ export const NPCS = {
     avatar: '🚜',
   },
 };
+
+// Everyone you can write to: agencies + contractors + (fictional) officials of real bodies.
+export const NPCS = { ...AGENCIES, ...OFFICIALS };
 
 // ---- Documents the player can hold. Quests consume/produce them.
 export const DOCS = {

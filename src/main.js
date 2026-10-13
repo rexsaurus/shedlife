@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { makeProjector, polygonArea, pointInPolygon, sampleHeight, snap } from './geo.js';
 import { SimClock } from './clock.js';
-import { CATALOG, byId } from './catalog.js';
+import { CATALOG, byId, SHOP_TABS, paidOnPlacement } from './catalog.js';
+import { BODIES, bodyById } from './officials.js';
+import { portraitSpec, mountPortrait, talk } from './portraits.js';
+import { initMap, openMap, mapDebug } from './wamap.js';
 import { makeStructure, tint, ghostify } from './meshes.js';
 import { evaluate, footprint } from './rules.js';
 import { SCENARIO, NPCS, QUESTS, questById } from './scenarios/king-county.js';
@@ -75,7 +78,8 @@ let g, clock, plan = [], uid = 0, tool = null, rot = 0, ghost = null, valid = fa
 const lot = () => ({ ring: ringM, zoning: parcel.zoning || 'RA-5' });
 
 function startGame() {
-  g = newGame(SCENARIO); g.parcelId = parcel.apn; g.zoning = parcel.zoning; g.playerName = 'Rex';
+  g = newGame(SCENARIO); g.parcelId = parcel.apn; g.zoning = parcel.zoning || 'RA-5'; g.county = parcel.county; g.playerName = 'Rex';
+  g.threads.permitting[0].body = `Welcome. You own ${parcel.acres?.toFixed(1)} acres in ${parcel.jurisdiction || parcel.county + ' County'}${parcel.zoning ? `, zoned ${parcel.zoning}` : ' (zoning not published statewide; we apply RA-5 rural rules)'}.${parcel.county && parcel.county !== 'King' ? `\n\nHeads up: this permit path is modeled on King County. ${parcel.county} County's agencies differ in the real world.` : ''}\n\nTo live there legally you need water, septic, power, a building permit and a final inspection. Start by asking us what can be built, then shop for a home and place it with a well and drainfield on the map.\n\nEvery request is an email. Agencies reply on the clock; use ⏭ to wait for mail. The 🏛️ Officials tab lets you talk to council members and commissioners.\n\n— King County Permitting`;
   clock = new SimClock(SCENARIO.startDate); clock.setSpeed(0);
   plan.splice(0).forEach(p => scene.remove(p.mesh));
   syncPlan(); selNpc = 'permitting'; voice(g.threads.permitting[0], 'permitting'); render();
@@ -102,6 +106,7 @@ function setTool(id) {
   tool = id; erase = false; $('erase').classList.remove('on');
   if (ghost) scene.remove(ghost); ghost = null;
   document.querySelectorAll('[data-item]').forEach(b => b.classList.toggle('on', b.dataset.item === id));
+  if ($('toolName')) $('toolName').textContent = id ? `Placing: ${byId[id].name}` : '';
   if (id) { ghost = makeStructure(byId[id]); ghostify(ghost); scene.add(ghost); }
 }
 const hit = e => { mouse.set(e.clientX / innerWidth * 2 - 1, -e.clientY / innerHeight * 2 + 1); ray.setFromCamera(mouse, cam); return ray.intersectObject(terrain)[0]; };
@@ -131,7 +136,8 @@ renderer.domElement.addEventListener('click', e => {
     hit(e); const h = ray.intersectObjects(plan.map(p => p.mesh), true)[0]; if (!h) return;
     let o = h.object; while (o.parent && !o.userData.item) o = o.parent;
     const i = plan.findIndex(p => p.mesh === o); if (i < 0) return;
-    if (plan[i].built && plan[i].item.cost) return toast('Built structures stay. (Demolition permits are a different game.)');
+    if (plan[i].built && plan[i].item.cost && plan[i].item.permit !== 'site') return toast('Built structures stay. (Demolition permits are a different game.)');
+    if (paidOnPlacement(plan[i].item)) { g.budget += plan[i].item.cost; g.spent -= plan[i].item.cost; }
     scene.remove(plan[i].mesh); plan.splice(i, 1); syncPlan(); return render();
   }
   if (!tool || !valid) return;
@@ -139,7 +145,7 @@ renderer.domElement.addEventListener('click', e => {
 });
 // Place a catalog item at plan coords (x east, y north, metres from lot centre). Used by clicks and by tests.
 function placeItem(id, x, y, r = 0) {
-  const item = byId[id], buyNow = item.permit === 'exempt' || item.permit === 'none';
+  const item = byId[id], buyNow = paidOnPlacement(item);
   const corners = footprint(item, x, y, r);
   if (!corners.every(p => pointInPolygon(p, ringM))) return false;
   if (buyNow && item.cost > g.budget) { toast(`Not enough money for ${item.name}.`); return false; }
@@ -190,12 +196,15 @@ async function voice(msg, npc) {
   try {
     const r = await (await fetch('/api/npc', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ npc, verdict: msg.verdict, day: msg.deliverDay, parcel, thread: (g.threads[npc] || []).filter(m => m.id < msg.id && (m.delivered || m.from === 'me')) }) })).json();
-    if (r.ok) { msg.body = r.body; msg.voiced = true; render(); } else console.warn('voice', r.error);
+    if (r.ok) { msg.body = r.body; msg.voiced = true; render(); if (npc === selNpc && msg.delivered) talk(headPortrait, r.body.split(/\s+/).length * 75); } else console.warn('voice', r.error);
   } catch (e) { console.warn(e); }
 }
 
 // ---------------------------------------------------------------- UI
-let composeQuest = null;
+let composeQuest = null, inboxTab = 'agencies', headPortrait = null;
+const AGENCY_BG = { permitting: '#2d6a4f', health: '#2c5d7c', ecology: '#1f6f8b', lni: '#a8741a', utility: '#4a4a52' };
+const specFor = id => portraitSpec(id, NPCS[id].official ? NPCS[id].color : AGENCY_BG[id] || '#7a5c2e');
+document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { inboxTab = b.dataset.tab; render(); });
 function render() {
   if (!g) return;
   $('sDay').textContent = g.day; $('sDeadline').textContent = SCENARIO.deadlineDay;
@@ -203,24 +212,36 @@ function render() {
   $('sProgress').textContent = `${Object.values(g.quests).filter(s => s === 'done').length}/${QUESTS.length}`;
   $('clock').textContent = `Day ${gameDay()}`;
   const u = unread(g); $('unread').innerHTML = u ? `<span class="badge b-answer">${u}</span>` : '';
-  // threads
+  // threads (agencies & contractors | officials grouped by body)
   const last = id => (g.threads[id] || []).filter(m => m.delivered).at(-1);
-  const order = Object.keys(NPCS).sort((a, b) => (last(b)?.deliverDay ?? -1) - (last(a)?.deliverDay ?? -1));
-  $('threads').innerHTML = order.map(id => {
+  const row = id => {
     const n = NPCS[id], l = last(id), has = (g.threads[id] || []).some(m => m.delivered && !m.read && m.from !== 'me');
     const waiting = (g.threads[id] || []).some(m => !m.delivered);
-    return `<div class="th ${id === selNpc ? 'sel' : ''}" data-npc="${id}"><div class="av">${n.avatar}</div><div><div class="nm">${n.name}${n.real ? '' : '<span class="tag">fictional</span>'}${waiting ? ' <span class="tag">⏳ awaiting</span>' : ''}</div><div class="sub">${l ? l.subject : n.org}</div></div>${has ? '<span class="dot"></span>' : ''}</div>`;
-  }).join('');
+    return `<div class="th ${id === selNpc ? 'sel' : ''}" data-npc="${id}"><canvas class="pt" data-pt="${id}"></canvas><div><div class="nm">${n.official ? n.shortName : n.name}${n.official ? ` <span class="tag">${n.seat}</span>` : n.real ? '' : '<span class="tag">fictional</span>'}${waiting ? ' <span class="tag">⏳</span>' : ''}</div><div class="sub">${l ? l.subject : n.official ? (n.priorities.length ? 'Cares about ' + n.priorities.join(', ') : 'Hears permit appeals') : n.org}</div></div>${has ? '<span class="dot"></span>' : ''}</div>`;
+  };
+  document.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === inboxTab));
+  if (inboxTab === 'agencies') {
+    const order = Object.keys(NPCS).filter(id => !NPCS[id].official).sort((a, b) => (last(b)?.deliverDay ?? -1) - (last(a)?.deliverDay ?? -1));
+    $('threads').innerHTML = order.map(row).join('');
+  } else {
+    $('threads').innerHTML = BODIES.map(b => `<div class="bodyhead" style="background:${b.color}" title="${esc(b.role)}">${b.name}${b.relevant ? ' · your parcel' : ''}</div>` +
+      Object.keys(NPCS).filter(id => NPCS[id].body === b.id).map(row).join('')).join('');
+  }
+  document.querySelectorAll('canvas[data-pt]').forEach(c => mountPortrait(c, specFor(c.dataset.pt)));
   document.querySelectorAll('.th').forEach(el => el.onclick = () => { selNpc = el.dataset.npc; composeQuest = null; render(); });
   // thread
   const n = NPCS[selNpc], msgs = g.threads[selNpc] || [];
   msgs.forEach(m => { if (m.delivered) m.read = true; });
-  $('thread').innerHTML = `<div class="msg" style="background:#f6f2e8"><b>${n.avatar} ${n.name}</b><br><span class="claude">${n.org}${n.email ? ' · ' + n.email : ''}${n.channel ? ' · ' + n.channel : ''}</span></div>` +
-    msgs.map(m => m.from === 'me'
-      ? `<div class="msg me"><div class="hd"><b>You</b><span>Day ${m.day}</span></div><b>${esc(m.subject)}</b>\n${esc(m.body)}${m.attachments?.length ? `<div class="att">📎 ${m.attachments.map(docName).join(', ')}</div>` : ''}</div>`
+  if ($('threadHead').dataset.npc !== selNpc) {
+    const b = n.official ? bodyById[n.body] : null;
+    $('threadHead').innerHTML = `<canvas class="ptBig" id="ptHead"></canvas><div><b>${n.name}</b><br><span class="claude">${n.official ? `${b.name} · ${n.seat}<br><i>Fictional official · real body.</i> ${esc(b.role)}` : `${n.org}${n.email ? ' · ' + n.email : ''}${n.channel ? ' · ' + n.channel : ''}${n.real ? '<br><i>Real agency · illustrative staffer portrait</i>' : ''}`}</span></div>`;
+    $('threadHead').dataset.npc = selNpc; headPortrait = mountPortrait($('ptHead'), specFor(selNpc));
+  }
+  $('thread').innerHTML = msgs.map(m => m.from === 'me'
+      ? `<div class="msg me"><div class="hd"><b>You</b><span>Day ${m.day}</span></div>${n.official ? '' : `<b>${esc(m.subject)}</b>\n`}${esc(m.body)}${m.attachments?.length ? `<div class="att">📎 ${m.attachments.map(docName).join(', ')}</div>` : ''}</div>`
       : m.delivered
-        ? `<div class="msg"><div class="hd"><b>${n.name}<span class="badge b-${m.verdict?.kind}">${label(m.verdict?.kind)}</span></b><span>Day ${m.deliverDay}${m.voiced ? ' · ✦ Claude' : ''}</span></div><b>${esc(m.subject)}</b>\n${esc(m.body)}</div>`
-        : `<div class="msg pending">⏳ Waiting for a reply from ${n.name}… (expected around day ${m.deliverDay})</div>`).join('');
+        ? `<div class="msg"><div class="hd"><b>${n.official ? n.shortName : n.name}${label(m.verdict?.kind) ? `<span class="badge b-${m.verdict?.kind}">${label(m.verdict?.kind)}</span>` : ''}</b><span>Day ${m.deliverDay}${m.voiced ? ' · ✦ Claude' : ''}</span></div>${n.official ? '' : `<b>${esc(m.subject)}</b>\n`}${esc(m.body)}</div>`
+        : `<div class="msg pending">⏳ Waiting for a reply from ${n.name}… (expected around day ${m.deliverDay})</div>`).join('') || `<div class="claude" style="padding:8px">${n.official ? 'Say hello. Officials write the rules, but can\'t decide your permit.' : 'No messages yet.'}</div>`;
   $('thread').scrollTop = 1e9;
   renderCompose(); renderQuests();
 }
@@ -230,8 +251,8 @@ const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&
 
 function renderCompose() {
   const n = NPCS[selNpc], qs = QUESTS.filter(q => q.npc === selNpc);
-  $('cTo').textContent = `To: ${n.avatar} ${n.name}`;
-  const opts = qs.map(q => `<option value="${q.id}">${{ done: '✅', pending: '⏳', open: '•' }[g.quests[q.id]]} ${q.title}</option>`).join('') + '<option value="">💬 Ask a question</option>';
+  $('cTo').textContent = `To: ${n.official ? n.name : n.avatar + ' ' + n.name}`;
+  const opts = qs.map(q => `<option value="${q.id}">${{ done: '✅', pending: '⏳', open: '•' }[g.quests[q.id]]} ${q.title}</option>`).join('') + `<option value="">${n.official ? '💬 Talk' : '💬 Ask a question'}</option>`;
   const log = questLog(g); const keep = composeQuest ?? (qs.find(q => g.quests[q.id] === 'open' && log.find(l => l.id === q.id).ready)?.id || qs.find(q => g.quests[q.id] === 'open')?.id || '');
   if ($('cQuest').dataset.npc !== selNpc || $('cQuest').dataset.keep !== keep) {
     $('cQuest').innerHTML = opts; $('cQuest').value = keep; $('cQuest').dataset.npc = selNpc; $('cQuest').dataset.keep = keep; fillDraft();
@@ -244,7 +265,8 @@ function renderCompose() {
     $('atts').dataset.sig = held.join() + selNpc;
   }
   const real = n.real ? (n.email ? `mailto:${n.email}?subject=${encodeURIComponent(subjectNow())}&body=${encodeURIComponent($('cBody').value)}` : n.url) : null;
-  $('realMail').textContent = n.real ? (n.email ? 'Open as real email ↗' : 'Real portal ↗') : 'fictional company';
+  $('realMail').textContent = n.real ? (n.email ? 'Open as real email ↗' : 'Real portal ↗') : n.official ? 'fictional member of a real body' : 'fictional company';
+  $('atts').style.display = n.official ? 'none' : '';
   real ? $('realMail').setAttribute('href', real) : $('realMail').removeAttribute('href');
   $('send').disabled = !!g.outcome;
 }
@@ -253,6 +275,7 @@ function fillDraft() {
   const q = $('cQuest').value;
   if (q) { const d = draft(g, q); $('cBody').value = d.body; $('cHint').innerHTML = linkify(questById[q].cite);
     $('atts').dataset.sig = ''; }
+  else if (NPCS[selNpc].official) { $('cBody').value = ''; $('cBody').placeholder = `Say something to ${NPCS[selNpc].shortName}…`; $('cHint').textContent = 'Officials answer right away. They set the rules but can\'t decide your permit.'; }
   else { $('cBody').value = `Hello ${NPCS[selNpc].name},\n\n`; $('cHint').textContent = 'Questions are free, take ~2 days, and never change your permits.'; }
 }
 $('cQuest').onchange = () => { composeQuest = $('cQuest').value; $('cQuest').dataset.keep = composeQuest; fillDraft(); $('atts').dataset.sig = ''; render(); };
@@ -262,10 +285,10 @@ $('send').onclick = () => {
   const r = send(g, { npc: selNpc, questId, body: $('cBody').value, subject: subjectNow(), attachments });
   voice(r.reply, selNpc);
   composeQuest = null; $('cQuest').dataset.keep = '#'; $('atts').dataset.sig = '';
-  toast(`✉ Sent to ${NPCS[selNpc].name}. Reply expected around day ${r.reply.deliverDay}. Press ⏭ or run the clock.`);
+  if (NPCS[selNpc].official) { if (!voiceOn) talk(headPortrait, 2500); else toast(`${NPCS[selNpc].shortName} is thinking…`); }
+  else toast(`✉ Sent to ${NPCS[selNpc].name}. Reply expected around day ${r.reply.deliverDay}. Press ⏭ or run the clock.`);
   render();
 };
-$('newMail').onclick = () => { const order = Object.keys(NPCS); selNpc = order[(order.indexOf(selNpc) + 1) % order.length]; composeQuest = null; render(); };
 
 function renderQuests() {
   const icon = q => q.status === 'done' ? '✅' : q.status === 'pending' ? '⏳' : q.ready ? '🟢' : '🔒';
@@ -274,7 +297,8 @@ function renderQuests() {
   const vs = g.plan.eval.violations;
   $('viol').innerHTML = !plan.length ? '<li style="color:var(--mute)">Place a home, a well and a septic drainfield on the lot.</li>' : vs.length ? vs.map(v => `<li title="${esc(v.ref)}">${esc(v.msg)}</li>`).join('') : '<li style="color:var(--green)">✓ Site plan meets the rules we check</li>';
   $('docs').innerHTML = g.docs.length ? g.docs.map(d => `<li>${docName(d)}</li>`).join('') : '<li style="color:var(--mute)">None yet</li>';
-  $('parcel').innerHTML = `<b>PIN ${parcel.apn}</b> · ${parcel.zoning} · ${parcel.acres?.toFixed(2)} ac<br>${parcel.jurisdiction} · ${parcel.use}<br>Relief ${(Math.max(...hs) - Math.min(...hs)).toFixed(0)} m in view · <a href="https://blue.kingcounty.com/Assessor/eRealProperty/Detail.aspx?ParcelNbr=${parcel.apn}" target="_blank" rel="noopener">Assessor ↗</a>`;
+  $('parcel').innerHTML = `<b>${parcel.county || 'King'} County · ${parcel.apn}</b><br>${parcel.zoning || 'zoning n/a (RA-5 rules)'} · ${parcel.acres?.toFixed(2)} ac · ${parcel.jurisdiction || ''}<br>${parcel.use || ''}${parcel.address ? ' · ' + parcel.address : ''}<br>Relief ${(Math.max(...hs) - Math.min(...hs)).toFixed(0)} m in view${(parcel.county || 'King') === 'King' ? ` · <a href="https://blue.kingcounty.com/Assessor/eRealProperty/Detail.aspx?ParcelNbr=${parcel.apn}" target="_blank" rel="noopener">Assessor ↗</a>` : ''}<br><button id="pickLand" style="margin-top:6px">🗺 Pick other land in Washington</button>`;
+  $('pickLand').onclick = () => openMap(c);
 }
 
 let toastCb = null;
@@ -284,15 +308,16 @@ $('toast').onclick = () => { $('toast').style.display = 'none'; toastCb?.(); };
 function modal(html) { $('modalCard').innerHTML = html; $('modal').style.display = 'flex'; }
 function introModal() {
   modal(`<h1>🏡 ${SCENARIO.title}</h1><p>${SCENARIO.pitch}</p>
-  <p><b>Real parcel:</b> King County PIN ${parcel.apn}, ${parcel.zoning}, ${parcel.acres?.toFixed(1)} acres, real USGS terrain.</p>
+  <p><b>Real parcel:</b> ${parcel.county || 'King'} County ${parcel.apn}, ${parcel.zoning || ''} ${parcel.acres?.toFixed(1)} acres, real USGS terrain. Or pick any parcel in Washington from the map.</p>
   <p><b>How to play</b></p><ol style="padding-left:18px;margin:4px 0">
-  <li>Draw a site plan: place a home, a well and a septic drainfield (bottom bar). Respect the setbacks.</li>
+  <li><b>Shop</b> real Washington sheds and homes 🛒, then place your home, a well and a septic drainfield. Respect the setbacks.</li>
   <li>Every move is an <b>email</b> to a real agency or a contractor. Pick a request, attach documents, send.</li>
   <li>Replies arrive on the clock. Press <b>⏭ Next mail</b> to wait. Approvals unlock the next steps.</li>
   <li>Win: pass final inspection by day ${SCENARIO.deadlineDay} without running out of ${fmt$(SCENARIO.budget)}.</li></ol>
   <p class="claude">Agency names and contacts are real; fees follow King County's 2026 fee guides; contractors are fictional. Replies are a game simulation, not permitting advice.</p>
-  <p style="text-align:right"><button class="primary" id="go">Start</button></p>`);
+  <p style="text-align:right"><button id="goMap">🗺 Pick land on the map</button> <button class="primary" id="go">Start on this lot</button></p>`);
   $('go').onclick = () => { $('modal').style.display = 'none'; };
+  $('goMap').onclick = () => { $('modal').style.display = 'none'; openMap(); };
 }
 function endModal() {
   const o = g.outcome;
@@ -302,8 +327,42 @@ function endModal() {
 }
 
 // ---------------------------------------------------------------- build bar
-$('catalog').innerHTML = CATALOG.map(i => `<button data-item="${i.id}" title="${i.name} · ${i.sqft} sq ft${i.cost ? ' · ' + fmt$(i.cost) : ''}">${{ accessory: '🛖', dwelling: '🏠', adu: '🏡', rv: '🚐', well: '💧', septic: '🟫', power: '☀️' }[i.kind]} ${i.name.split(' (')[0]}</button>`).join('');
-document.querySelectorAll('[data-item]').forEach(b => b.onclick = () => setTool(tool === b.dataset.item ? null : b.dataset.item));
+const ICON = { accessory: '🛖', dwelling: '🏠', adu: '🏡', rv: '🚐', well: '💧', septic: '🟫', power: '☀️' };
+$('catalog').innerHTML = ['well', 'septic', 'solar'].map(id => `<button data-item="${id}">${ICON[byId[id].kind]} ${byId[id].name.split(' ')[0] === 'Drilled' ? 'Well' : byId[id].name.split(' ')[0]}</button>`).join('') + '<button id="shopBtn" class="primary">🛒 Shop homes & sheds</button><span id="toolName" class="claude"></span>';
+document.querySelectorAll('#catalog [data-item]').forEach(b => b.onclick = () => setTool(tool === b.dataset.item ? null : b.dataset.item));
+$('shopBtn').onclick = () => openShop();
+$('topShop').onclick = () => openShop();
+$('topMap').onclick = () => openMap(c);
+let shopTab = 'homes';
+const hex = n => '#' + n.toString(16).padStart(6, '0');
+const priceLabel = i => i.priceType === 'listed' ? 'listed price' : i.priceType === 'starting-at' ? 'starting at · excl. site work' : i.priceType === 'base-kit' ? 'base kit' : i.estPrice ? 'game estimate' : '';
+function openShop(tab = shopTab) {
+  shopTab = tab;
+  const tabs = [...SHOP_TABS, ['all', 'Everything', () => true]];
+  const f = tabs.find(t => t[0] === tab)[2];
+  const items = CATALOG.filter(f).sort((a, b) => a.cost - b.cost);
+  $('shopTabs').innerHTML = tabs.map(([id, n]) => `<button data-st="${id}" class="${id === tab ? 'on' : ''}">${n}</button>`).join('');
+  $('shopGrid').innerHTML = items.map(i => {
+    const badges = [
+      i.permit === 'exempt' && ['ok', 'No building permit (<200 sq ft)'], i.permit === 'building' && ['', 'Building permit'],
+      i.kind === 'rv' && ['bad', 'RV in King County — not a legal home'], isHome(i) && ['ok', 'Legal dwelling'], i.kind === 'adu' && ['', 'Needs a primary home'],
+      i.factoryBuilt && i.kind !== 'accessory' && ['', 'Factory-built'], i.estFootprint && ['warn', 'Footprint estimated'], i.status === 'UNVERIFIED' && ['warn', 'Unverified listing'],
+    ].filter(Boolean);
+    const afford = !paidOnPlacement(i) || i.cost <= g.budget;
+    return `<div class="item"><div class="sw" style="background:${hex(i.color)};border-bottom:10px solid ${hex(i.roof)}">${ICON[i.kind]}</div><div class="body">
+      <b>${esc(i.name)}</b><br><small>${esc(i.vendor || 'Site work')}${i.vendorCity ? ' · ' + esc(i.vendorCity) : ''}</small>
+      <div>${i.wFt ? `${i.wFt}×${i.dFt} ft · ` : ''}${i.sqft} sq ft</div>
+      <div class="price">${i.cost ? fmt$(i.cost) : 'priced by quests'} <small>${priceLabel(i)}</small></div>
+      ${i.includes ? `<small class="claude">${esc(i.includes)}</small>` : ''}
+      <div class="badges">${badges.map(([k, t]) => `<span class="bdg ${k}">${t}</span>`).join('')}</div>
+      <div class="act"><button class="primary" data-buy="${i.id}" ${afford ? '' : 'disabled'}>${afford ? 'Place on lot' : 'Can’t afford'}</button>${i.url ? ` <a href="${i.url}" target="_blank" rel="noopener">Vendor page ↗</a>` : ''}</div></div></div>`;
+  }).join('');
+  $('shop').style.display = 'flex';
+  document.querySelectorAll('[data-st]').forEach(b => b.onclick = () => openShop(b.dataset.st));
+  document.querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { $('shop').style.display = 'none'; setTool(b.dataset.buy); toast(`Placing ${byId[b.dataset.buy].name}: click the lot. R rotates, Esc cancels.`); });
+}
+const isHome = i => i.kind === 'dwelling';
+$('shopClose').onclick = () => { $('shop').style.display = 'none'; };
 
 // ---------------------------------------------------------------- loop
 let last = performance.now();
@@ -320,5 +379,6 @@ renderer.setAnimationLoop(now => {
 
 buildWorld(await (await fetch('/data/parcel.json')).json());
 try { const s = await (await fetch('/api/status')).json(); voiceOn = s.claude; $('sVoice').textContent = s.claude ? '✦ Claude' : 'Scripted'; $('sVoice').title = s.claude ? s.model : 'Add ANTHROPIC_API_KEY to .env'; } catch { $('sVoice').textContent = 'Scripted'; }
+initMap(d => { buildWorld(d); startGame(); toast(`📍 New land: ${d.parcel.acres} acres in ${d.parcel.county} County. Fresh budget, fresh inbox.`); });
 startGame(); introModal();
-window.__shedlife = { get g() { return g; }, plan, clock: () => clock, placeItem, get ring() { return ringM; }, render };
+window.__shedlife = { mapDebug, openShop, get g() { return g; }, plan, clock: () => clock, placeItem, get ring() { return ringM; }, render };

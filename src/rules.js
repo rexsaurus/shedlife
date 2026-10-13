@@ -83,7 +83,7 @@ export function evaluate(plan, lot) {
   homes.slice(1).forEach(h => v(h.uid, 'dwelling-count', 'One primary dwelling per RA lot.', 'KCC 21A.12.030 (RA-5: one dwelling per 5 acres)'));
   adus.slice(1).forEach(a => v(a.uid, 'adu-count', 'One ADU per property.', RULES.adu.ref));
   adus.forEach(a => { if (!homes.length) v(a.uid, 'adu-primary', 'A detached ADU needs a primary dwelling on the lot.', RULES.adu.ref); if (a.item.sqft > RULES.adu.maxSqft) v(a.uid, 'adu-size', `ADU over ${RULES.adu.maxSqft} sq ft.`, RULES.adu.ref); });
-  plan.filter(p => p.item.kind === 'rv' && !homes.length).forEach(r => v(r.uid, 'rv', 'An RV is not a dwelling in King County — fine for camping up to 60 days a year, not to live in.', RULES.rv.ref));
+  plan.filter(p => p.item.kind === 'rv' && !homes.length).forEach(r => v(r.uid, 'rv', `${r.item.name} counts as an RV in King County (tiny homes on wheels and park models included) — camping up to 60 days a year, not a legal home.`, RULES.rv.ref));
   if (homes.length && !plan.some(p => p.item.kind === 'septic')) v(null, 'septic-missing', 'A home needs a septic system on the plan.', 'WAC 246-272A');
   if (homes.length && !plan.some(p => p.item.kind === 'well')) v(null, 'well-missing', 'A home needs a water source on the plan (well).', 'RCW 19.27.097');
 

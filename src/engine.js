@@ -45,7 +45,7 @@ export function send(g, { npc, questId = null, body = '', subject, attachments =
   const q = questId ? questById[questId] : null;
   const out = { id: ++g.seq, from: 'me', to: npc, subject: subject || (q ? q.title : 'Question'), body, attachments, day: g.day, delivered: true, read: true };
   thread(g, npc).push(out);
-  const v = verdict(g, q, attachments, body);
+  g._to = npc; const v = verdict(g, q, attachments, body);
   if (v.kind === 'accepted') { g.budget -= v.fee; g.spent += v.fee; g.quests[q.id] = 'pending'; }
   const reply = deliver(g, npc, { subject: 'Re: ' + out.subject, verdict: v, day: g.day + v.days });
   g.events.push({ day: g.day, type: 'sent', npc, quest: q?.id, verdict: v.kind });
@@ -53,7 +53,7 @@ export function send(g, { npc, questId = null, body = '', subject, attachments =
 }
 
 function verdict(g, q, attachments, body) {
-  if (!q) return { kind: 'answer', days: 2, question: body };
+  if (!q) return NPCS[g._to]?.official ? { kind: 'chat', days: 0, question: body } : { kind: 'answer', days: 2, question: body };
   const base = { quest: q.id, title: q.title, cite: q.cite };
   if (g.quests[q.id] === 'done') return { ...base, kind: 'duplicate', days: 1 };
   if (g.quests[q.id] === 'pending') return { ...base, kind: 'pending', days: 1 };

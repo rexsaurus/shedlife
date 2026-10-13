@@ -9,8 +9,14 @@
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
     "fetch-parcel": "node scripts/fetch-parcel.mjs",
-    "simulate": "node scripts/simulate.mjs"
+    "simulate": "node scripts/simulate.mjs",
+    "vendors": "node scripts/build-vendors.mjs"
   },
-  "dependencies": { "three": "^0.169.0" },
-  "devDependencies": { "vite": "^5.4.0" }
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "three": "^0.169.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
 }

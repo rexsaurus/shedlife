@@ -18,11 +18,13 @@ test('setbacks, well-to-drainfield, RV and ADU rules', () => {
   const e = evaluate([place(1, 'tiny', 3, 50), place(2, 'septic', 60, 50), place(3, 'well', 80, 50), place(4, 'adu', 150, 80)], LOT);
   const rules = e.violations.map(v => v.rule);
   assert.ok(rules.includes('setback')); assert.ok(rules.includes('well-septic'));
-  const rv = evaluate([place(1, 'rv', 50, 50)], LOT).violations.map(v => v.rule);
+  const rv = evaluate([place(1, 'sth-freemont-8x24', 50, 50)], LOT).violations.map(v => v.rule);
   assert.deepEqual(rv, ['rv']);
   const adu = evaluate([place(1, 'adu', 50, 50)], LOT).violations.map(v => v.rule);
   assert.ok(adu.includes('adu-primary'));
   assert.equal(byId.shed10x12.permit, 'exempt'); assert.equal(byId.studio.permit, 'building');
+  assert.equal(byId['oh-gable-dormer-10x20-west-richland']?.permit ?? 'building', 'building'); // exactly 200 sq ft is NOT under 200
+  assert.equal(byId['sth-freemont-8x24'].permit, 'none'); // tiny home on wheels = RV
 });
 test('emails out of order are bounced, no fee', () => {
   const g = withPlan(newGame(SCENARIO), goodPlan());

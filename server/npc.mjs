@@ -5,7 +5,7 @@ import { factsOf } from '../src/letters.js';
 import { KNOWLEDGE } from '../src/scenarios/king-county-knowledge.js';
 import { OFFICIAL_KNOWLEDGE, bodyById } from '../src/officials.js';
 
-export const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
+export const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
 
 export function buildPrompt(args) {
   const n = NPCS[args.npc];
@@ -51,7 +51,7 @@ export async function voiceReply(args, { key = process.env.ANTHROPIC_API_KEY, wo
   const r = await fetchImpl('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', ...(workspace ? { 'anthropic-workspace-id': workspace } : {}) }, // user-scoped sk-ant-usr keys need a workspace id
-    body: JSON.stringify({ model: MODEL, max_tokens: 500, system, messages: [{ role: 'user', content: user }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 500, system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }], messages: [{ role: 'user', content: user }] }),
   });
   if (!r.ok) return { ok: false, error: `Anthropic ${r.status}: ${(await r.text()).slice(0, 200)}` };
   const j = await r.json();

@@ -88,7 +88,7 @@ python3 scripts/playtest.py out/          # headless playthrough + screenshots (
 | Var | Purpose |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude NPC voices (scripted letters without it) |
-| `ANTHROPIC_MODEL` | Model for NPC voices (default `claude-sonnet-5-5`) |
+| `ANTHROPIC_MODEL` | Model for NPC voices (default `claude-haiku-5-5` (override with `ANTHROPIC_MODEL`)) |
 | `ANTHROPIC_WORKSPACE_ID` | Needed for user-scoped keys |
 | `APIFY_TOKEN` | Apify MCP for fetching agency pages |
 | `RENTCAST_API_KEY` | Land-for-sale listings (California panel) |

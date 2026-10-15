@@ -17,7 +17,7 @@ npm run fetch-parcel -- <PIN> king    # refresh public/data/parcel.json from Kin
 python3 scripts/playtest.py           # headless browser playthrough + screenshots (needs `pip install playwright`)
 ```
 Secrets live in `.env` (git-ignored, never read or print it): `ANTHROPIC_API_KEY` (+ `ANTHROPIC_WORKSPACE_ID` for
-user-scoped `sk-ant-usr` keys), `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`), `APIFY_TOKEN`, `RENTCAST_API_KEY`.
+user-scoped `sk-ant-usr` keys), `ANTHROPIC_MODEL` (default `claude-haiku-5-5` (override with `ANTHROPIC_MODEL`)), `APIFY_TOKEN`, `RENTCAST_API_KEY`.
 
 ## Architecture
 | File | Role |
